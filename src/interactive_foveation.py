@@ -42,8 +42,8 @@ def main():
         ny = 30
         fovea_width = 100
         fovea_height = 100
-        points_x, points_y = sample_geometric_sequence(cursor_x, cursor_y, nx, ny, fovea_width, fovea_height)
-        # points_x, points_y = sample_gaussian(cursor_x, cursor_y, nx, ny, fovea_width, fovea_height)
+        # points_x, points_y = sample_geometric_sequence(cursor_x, cursor_y, nx, ny, fovea_width, fovea_height)
+        points_x, points_y = sample_trapezoidal(cursor_x, cursor_y, nx, ny, fovea_width, fovea_height)
         all_points_x = points_x
         all_points_y = points_y
 

@@ -64,7 +64,24 @@ def sample_uniform(center_x,center_y, nx, ny, width, height):
     return x_points.astype(int), y_points.astype(int)
 
 def sample_trapezoidal(center_x,center_y, nx, ny, width, height):
-    pass
+    """
+    Sample a uniform distribution in the center region (width/2, height/2), 
+    then a linear decay for the outer region
+    """
+    proportion_inv = 2
+    outer_points_x, outer_points_y = sample_uniform(center_x,center_y, nx//2, ny//2, width, height)
+    # remove from the outer points any that are within the inner width/2, height/2 region
+    outer_points_x = outer_points_x[abs(outer_points_x-center_x) < width//proportion_inv]
+    outer_points_y = outer_points_y[abs(outer_points_y-center_y) < height//proportion_inv]
+    nx_inner = nx - len(outer_points_x)
+    ny_inner = ny - len(outer_points_y)
+    center_points_x, center_points_y = sample_uniform(center_x,center_y, nx_inner, ny_inner, width//proportion_inv, height//proportion_inv)
+    x_points = np.concatenate((outer_points_x, center_points_x))
+    y_points = np.concatenate((outer_points_y, center_points_y))
+    x_sorted_integers = np.sort(x_points.astype(int))
+    y_sorted_integers = np.sort(y_points.astype(int))    
+    return x_sorted_integers, y_sorted_integers
+
 
 def sample_gaussian(center_x,center_y, nx, ny, width, height):
     """
@@ -86,6 +103,9 @@ def sample_gaussian(center_x,center_y, nx, ny, width, height):
     # return x_sorted_ints, y_sorted_ints
 
 def sample_polar(center_x,center_y, nx, ny, width, height):
+    """
+    Generate nx*ny points in a polar pattern
+    """
     pass
 
 #### Foveation Techniques ####
