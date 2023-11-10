@@ -38,11 +38,11 @@ def main():
         cursor_x, cursor_y = pygame.mouse.get_pos()
 
         # Create the Foveated Image
-        nx = 30
-        ny = 30
+        nx = 70
+        ny = 70
         fovea_width = 100
         fovea_height = 100
-        # points_x, points_y = sample_geometric_sequence(cursor_x, cursor_y, nx, ny, fovea_width, fovea_height)
+        #points_x, points_y = sample_geometric_sequence(cursor_x, cursor_y, nx, ny, fovea_width, fovea_height)
         points_x, points_y = sample_trapezoidal(cursor_x, cursor_y, nx, ny, fovea_width, fovea_height)
         all_points_x = points_x
         all_points_y = points_y
@@ -55,7 +55,7 @@ def main():
         #         pygame.draw.circle(screen, (0,0,255), (px,py), 3)
 
         img_array = pygame.surfarray.array3d(original_image)
-        img_array = max_pool_foveation(all_points_x, all_points_y, img_array)
+        img_array = direct_foveation(all_points_x, all_points_y, img_array)
         foveated_image = pygame.surfarray.make_surface(img_array)
         
         # Draw original_image onto the left, and foveated_image onto the right
@@ -65,7 +65,7 @@ def main():
         # Draw the sampled foveation points
         for px in points_x:
             for py in points_y:
-                pygame.draw.circle(screen, (255,0,0), (px,py), 3)
+                pygame.draw.circle(screen, (255,0,0), (px,py), 1)
         pygame.display.flip()
         clock.tick(60)
 
