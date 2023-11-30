@@ -31,7 +31,7 @@ class GOT10kDataset(Dataset):
                 video_dir = os.path.join(self.base_dir, line.strip())
                 if not os.path.exists(video_dir):
                     print(f'Video directory {video_dir} not found')
-
+                
                 for file in os.listdir(video_dir):
                     if file.split('.')[1] == 'jpg':
                         self.n_frames += 1
