@@ -24,8 +24,6 @@ class VotDataset(Dataset):
         for i in tqdm(range(len(self))): 
             self.preprocess_image(i,reprocess=True)
         
-
-
     def preprocess_image(self,imnum,reprocess:bool=False):
         img, yval = self.get_vid(imnum)
         torch.save(img,Path.join(self.cached_imgs,f'{imnum}.pt'))
@@ -52,7 +50,7 @@ class VotDataset(Dataset):
         imgs =  torch.load(Path.join(self.cached_imgs,f'{idx}.pt'))
         labels =  torch.load(Path.join(self.cached_labels,f'{idx}.pt'))
         return imgs,labels
-    
+
 if __name__ == "__main__": 
     ds = VotDataset()
     print(ds)

@@ -21,7 +21,6 @@ class FoveationModule(nn.Module):
         self.height = height
         self.n_fixations = n_fixations
 
-
     def sample_fovea(self, image):
         """
         Sample points from the fovea region of the image
