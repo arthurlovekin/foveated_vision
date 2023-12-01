@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 # /scratch/eecs542s001f23_class_root/eecs542s001f23_class/shared_data/foveated_vision/
 # LaSOT dataset 
-basedir_ = '/scratch/eecs542s001f23_class_root/eecs542s001f23_class/shared_data/foveated_vision/'
+basedir_ = '/scratch/eecs542s001f23_class_root/eecs542s001f23_class/shared_data/group_raz/data/vot/'
 directories = {'shortterm': Path.join(basedir_,'shortterm'),
                'longterm':Path.join(basedir_,'longterm')}
 
@@ -17,19 +17,22 @@ class VotDataset(Dataset):
         self.basedir = directories[dataset_name]
         with open(Path.join(self.basedir,'sequences','list.txt'),'r') as seqfile: 
             self.videos = [line.strip() for line in seqfile.readlines() if len(line.strip()) > 0 ] 
-        self.cached_imgs = Path.join(self.basedir, 'img_caches')
-        self.cached_labels = Path.join(self.basedir, 'img_labels')
-        os.makedirs(self.cached_imgs,exist_ok=True)
-        os.makedirs(self.cached_labels,exist_ok=True)
-        for i in tqdm(range(len(self))): 
-            self.preprocess_image(i,reprocess=True)
+        # self.cached_imgs = Path.join(self.basedir, 'img_caches')
+        # self.cached_labels = Path.join(self.basedir, 'img_labels')
+        # os.makedirs(self.cached_imgs,exist_ok=True)
+        # os.makedirs(self.cached_labels,exist_ok=True)
+        # for i in tqdm(range(len(self))): 
+        #     self.preprocess_image(i,reprocess=False)
         
 
 
     def preprocess_image(self,imnum,reprocess:bool=False):
-        img, yval = self.get_vid(imnum)
-        torch.save(img,Path.join(self.cached_imgs,f'{imnum}.pt'))
-        torch.save(yval,Path.join(self.cached_labels,f'{imnum}.pt'))
+        if (reprocess or 
+                (not Path.isfile(Path.join(self.cached_imgs,f'{imnum}.pt')) 
+                or not Path.isfile(Path.join(self.cached_labels,f'{imnum}.pt')))):
+            img, yval = self.get_vid(imnum)
+            torch.save(img,Path.join(self.cached_imgs,f'{imnum}.pt'))
+            torch.save(yval,Path.join(self.cached_labels,f'{imnum}.pt'))
 
     def __len__(self): 
         # wut 
@@ -48,10 +51,7 @@ class VotDataset(Dataset):
         return images,groundtruth
     
     def __getitem__(self,idx):
-
-        imgs =  torch.load(Path.join(self.cached_imgs,f'{idx}.pt'))
-        labels =  torch.load(Path.join(self.cached_labels,f'{idx}.pt'))
-        return imgs,labels
+        return self.get_vid(idx)
     
 if __name__ == "__main__": 
     ds = VotDataset()
