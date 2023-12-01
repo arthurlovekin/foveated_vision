@@ -38,7 +38,7 @@ class CombinerModel(nn.Module):
 
 class PeripheralFovealVisionModel(nn.Module):
     def __init__(self):
-        super().__init__(self)
+        super().__init__()
         self.foveation_module = FoveationModule()
         # TODO: Adjust the front and back of the resnets so they fit our dataloader images
         self.peripheral_model = PeripheralModel()
