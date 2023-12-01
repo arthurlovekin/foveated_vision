@@ -2,10 +2,9 @@
 # Simple example training ResNet on MNIST just as a proof of concept test for training.
 import torch
 import torchvision
-import torchvision.transforms as transforms
 from torch.utils.tensorboard import SummaryWriter
-import os
 from dataset.vot_dataset import *
+from dataset.got10k_dataset import *
 from peripheral_foveal_vision_model import PeripheralFovealVisionModel
 
 # Set device
@@ -27,6 +26,7 @@ test_loader = get_dataloader(batch_size=1, targ_size=(224, 224))
 
 # Load the model
 model = PeripheralFovealVisionModel()
+# model = torchvision.models.resnet50(pretrained=True)  # For testing before model is ready
 
 # Parallelize training across multiple GPUs
 # model = torch.nn.DataParallel(model)
@@ -42,7 +42,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 writer = SummaryWriter()
 # Show a batch of images
 images, labels = next(iter(train_loader))
-images = images[0, :, :, :, :]
+images = images[0, :, :, :, :]  # Remove the batch dimension so we can display
 print(images.shape)
 grid = torchvision.utils.make_grid(images)
 writer.add_image('images', grid, 0)
