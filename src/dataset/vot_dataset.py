@@ -11,10 +11,11 @@ directories = {'shortterm': Path.join(basedir_,'shortterm'),
                'longterm':Path.join(basedir_,'longterm')}
 
 class VotDataset(Dataset):
-    def __init__(self, dataset_name='longterm',targ_size = (512,512),clip_secs:int = 5):
+    def __init__(self, dataset_name='longterm',in_mem:bool=False,targ_size = (650,650),clip_secs:int = 5):
         # get list of video sequences:
         self.basedir = directories[dataset_name]
         self.seq_len = clip_secs * 30
+        self.in_mem=in_mem
 
         if targ_size is None:
             self.resize = lambda x:x
@@ -31,6 +32,10 @@ class VotDataset(Dataset):
 
         n_clips = [vl // self.seq_len for vl in vidlengths]
         self.videos =[ (v_name, i) for v_name, n_clips in zip(videos,n_clips) for i in range(n_clips)] 
+
+        if in_mem: 
+            print('loading')
+            self.video_caches = [self.get_vid(idx) for idx in tqdm(range(len(self.videos))) ]
 
         # self.cached_imgs = Path.join(self.basedir, 'img_caches')
         # self.cached_labels = Path.join(self.basedir, 'img_labels')
@@ -61,27 +66,33 @@ class VotDataset(Dataset):
         groundtruth = groundtruth[start_idx:end_idx,:]
         images = torch.zeros( [self.seq_len] + list(first.shape))
         for i in range(self.seq_len): 
-            images[i] = self.resize(read_image(Path.join(viddir,f'color/{start_idx + i+1:08d}.jpg')))
+            images[i] = self.resize(read_image(Path.join(viddir,f'color/{start_idx + i+1:08d}.jpg'))) / 255.0
         
         return images,groundtruth
     
     def __getitem__(self,idx):
+        if self.in_mem: 
+            return self.video_caches
         return self.get_vid(idx)
 
 
-def get_dataloader(dataset_name='longterm',targ_size = (250,250),batch_size=3,shuffle=True,**loader_kwargs):
+def get_dataloader(dataset_name='longterm',targ_size = None,batch_size=3,shuffle=True,**loader_kwargs):
     collate_fn = None
     ds = VotDataset(dataset_name=dataset_name,targ_size=targ_size)
     return DataLoader(ds,batch_size=batch_size,shuffle=shuffle,**loader_kwargs,collate_fn=collate_fn)
     
 if __name__ == "__main__": 
     from tqdm import tqdm
-    ds = VotDataset()
+    ds = VotDataset(in_mem=False)
     print(ds)
     print(len(ds))
-    print(ds[4])
+    img, key = ds[4]
+    print(img.shape)
+    print(key.shape)
+    print(img, key)
 
-    dl = get_dataloader()
+    dl = get_dataloader(targ_size=(650,650))
     for i,loaded in tqdm(enumerate(dl),total=len(ds)): 
+        
         if i %100: 
             print(loaded)
