@@ -35,7 +35,12 @@ model = PeripheralFovealVisionModel()
 model = model.to(device)
 
 # Define the loss function and optimizer
-criterion = torch.nn.CrossEntropyLoss()
+def iou_loss(box1, box2):
+  # Takes in Tensor[N, 4]s with bounding box corners
+  # Can output single number with reduction or N-element tensor
+  return torchvision.ops.distance_box_iou_loss(box1, box2, reduction='none')
+
+ce_loss = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 # Set up Tensorboard logging
@@ -62,7 +67,7 @@ for epoch in range(num_epochs):
 
         # Forward pass
         outputs = model(inputs)
-        loss = criterion(outputs, labels)
+        loss = iou_loss(outputs, labels)
 
         # Backward pass
         loss.backward()
