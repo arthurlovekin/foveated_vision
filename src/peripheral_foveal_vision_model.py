@@ -84,11 +84,11 @@ class PeripheralFovealVisionModel(nn.Module):
     
     def downsample_periphery(self, image, target_resolution=(480, 360)):
         return Resize(image, (target_resolution[0], target_resolution[1]), antialias=True)
-    
-def __main__():
 
+if __name__ == "__main__":
+    print("Making model")
     model = PeripheralModel()
-
+    print("Printing model summary")
     print(summary(model))
     # print(summary(model, input_size=(1, 3, 420, 420)))
     # test_input = torch.randn(1, 3, 420,420)
