@@ -24,8 +24,6 @@ class VotDataset(Dataset):
         # for i in tqdm(range(len(self))): 
         #     self.preprocess_image(i,reprocess=False)
         
-
-
     def preprocess_image(self,imnum,reprocess:bool=False):
         if (reprocess or 
                 (not Path.isfile(Path.join(self.cached_imgs,f'{imnum}.pt')) 
@@ -51,8 +49,16 @@ class VotDataset(Dataset):
         return images,groundtruth
     
     def __getitem__(self,idx):
+<<<<<<< HEAD:src/dataset/dataloader.py
         return self.get_vid(idx)
     
+=======
+
+        imgs =  torch.load(Path.join(self.cached_imgs,f'{idx}.pt'))
+        labels =  torch.load(Path.join(self.cached_labels,f'{idx}.pt'))
+        return imgs,labels
+
+>>>>>>> 8b202003da8c6810ebcf4357b987742b879e9129:src/dataset/vot_dataset.py
 if __name__ == "__main__": 
     ds = VotDataset()
     print(ds)
