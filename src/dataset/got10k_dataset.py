@@ -1,5 +1,6 @@
 from torch.utils.data import Dataset 
 from torchvision.io import read_image
+from torchvision.transforms import Resize
 import torch
 import os 
 
@@ -12,50 +13,59 @@ Dataset Properties:
 # max duration (sec): 148 (~14800 frames)
 # avg duration (sec): 15 (~150 frames)
 """
+GOT10K_SAMPLE_RATE_HZ = 10 
+
 class GOT10kDataset(Dataset):
-    def __init__(self, base_dir) -> None:
+    """ Creates video sample sequences from the GOT-10k dataset 
+        A sample consists of a sequence of images of fixed length and resolution, 
+        along with a sequence of bounding box labels
+    """
+    def __init__(self, base_dir, sample_resolution=(420,420), sample_seconds:int=5) -> None:
         super().__init__()
         self.base_dir = base_dir
+        self.frames_per_sequence = sample_seconds * GOT10K_SAMPLE_RATE_HZ
+        self.video_list_filepath = os.path.join(self.base_dir, 'list.txt')
 
-        # check if the base directory exists
-        if not os.path.exists(self.base_dir):
-            raise FileNotFoundError('Base directory not found')
-        if not os.path.basename(self.base_dir) in ['train', 'val', 'test']:
-            raise ValueError('Dataset must come from one of the folders "/train", "/val", or "/test"')
-        if not os.path.exists(os.path.join(self.base_dir, 'list.txt')):
-            raise FileNotFoundError('list.txt not found in the base directory')
-        
+        self.verify_dataset_validity()
+
+        self.resize = Resize(size=sample_resolution, antialias=True) if sample_resolution is not None else lambda x:x
         # find the number of videos in the folder, and number of total frames in all videos
         # Video folders in the form GOT-10k_Val_000180
         # Images are in the form 00000000.jpg
         self.n_videos = 0
         self.n_frames = 0
-        # self.video_lengths = []
-        with open(os.path.join(self.base_dir, 'list.txt'), 'r') as f:
-            self.video_filenames = f.readlines()
+        self.n_samples = 0
+        self.sample_directories = [] # list of tuples (video_name, index_from_video_start)
+        with open(self.video_list_filepath, 'r') as f:
+            self.video_filenames = [line.strip() for line in f.readlines() if len(line.strip()) > 0]
             self.n_videos = len(os.listdir(self.base_dir))-1 # subtract 1 for list.txt
             assert len(self.video_filenames) == self.n_videos, f'list.txt has {len(self.video_filenames)} lines, but the directory has {self.n_videos} videos'
             
-            for line in self.video_filenames:
-                if len(line.strip()) > 0:
-                    # get the number of frames in the video
-                    video_dir = os.path.join(self.base_dir, line.strip())
-                    if not os.path.exists(video_dir):
-                        print(f'Video directory {video_dir} not found')
-                    
-                    # Each video folder contains 4 annotation files, one meta-info file, and then all of the images
-                    self.n_frames += len(os.listdir(video_dir)) - 5
-                    # for file in os.listdir(video_dir):
-                    #     if file.split('.')[1] == 'jpg':
-                    #         self.n_frames += 1
+        # assign each video an index corresponding to the sample index
+        for video_name in self.video_filenames:
+            video_dir = os.path.join(self.base_dir, video_name)
+            with open(video_dir + '/groundtruth.txt', 'r') as gt_file:
+                n_video_frames = sum(1 for line in gt_file.readlines() if len(line) != 0)
+                assert n_video_frames == (len(os.listdir(video_dir)) - 5), f'Directory {video_dir} has {len(os.listdir(video_dir))} video files + 5 info files, which does not match number of ground-truth bounding boxes ({n_video_frames})'
+                
+                n_video_samples = n_video_frames // self.frames_per_sequence
+                self.sample_directories += zip( n_video_samples * [video_name],[i for i in range(n_video_samples)])
+                
+                self.n_frames += n_video_frames
+                self.n_samples += n_video_samples
+        
+        print(f'Found a total of {self.n_frames} frames in {self.n_videos} videos, which yields {self.n_samples} sequences of length {self.frames_per_sequence}. ({float(self.n_samples*self.frames_per_sequence)/float(self.n_frames)*100.0:.2f}% of frames used)')            
 
-        self.frames_per_sequence = 40 # sampled at 10Hz
-        # Not sure how much RAM we have
-
-
+    def verify_dataset_validity(self):
+        if not os.path.exists(self.base_dir):
+            raise FileNotFoundError(f'Base directory {self.base_dir} not found')
+        if not os.path.basename(self.base_dir) in ['train', 'val', 'test']:
+            raise ValueError('Dataset must come from one of the folders "/train", "/val", or "/test"')
+        if not os.path.exists(self.video_list_filepath):
+            raise FileNotFoundError(f'list.txt not found in the base directory {self.base_dir}')
+        
     def __len__(self) -> int:
-        return self.n_videos
-        # TODO: Might be n_sequences instead of n_videos
+        return len(self.sample_directories)
 
     def __getitem__(self, idx: int):
         """
@@ -64,27 +74,48 @@ class GOT10kDataset(Dataset):
             label_sequence: (torch.Tensor) of shape (frames_per_sequence, 4)
                 where the 4 labels correspond to bounding box corners (x1, y1, x2, y2)
         """
-        ## Method 1: Load entire videos with whatever resolution and length they have
-        video_dir = os.path.join(self.base_dir, self.video_filenames[idx].strip())
+        # ## Method 1: Load entire videos with whatever resolution and length they have
+        # video_dir = os.path.join(self.base_dir, self.video_filenames[idx].strip())
 
-        # Load ground Truth labels
-        # Each line of this file is a sequence of 4 floats, separated by commas: x1, y1, x2, y2        
-        with open(os.path.join(video_dir,'groundtruth.txt'),'r') as file: 
-            ground_truth = torch.tensor([[float(x) for x in line.split(',')] for line in file.readlines() if len(line) != 0])
+        # # Load ground Truth labels
+        # # Each line of this file is a sequence of 4 floats, separated by commas: x1, y1, x2, y2        
+        # with open(os.path.join(video_dir,'groundtruth.txt'),'r') as file: 
+        #     ground_truth = torch.tensor([[float(x) for x in line.split(',')] for line in file.readlines() if len(line) != 0])
 
-        ## Load the entire video file (idx refers to which video to load)
-        first = read_image(os.path.join(video_dir,f'{1:08d}.jpg')) # determine image shape
-        image_sequence = torch.zeros( [ground_truth.shape[0]] + list(first.shape))
-        for i in range(ground_truth.shape[0]):
-            image_sequence[i] = read_image(os.path.join(video_dir, f'{i+1:08d}.jpg'))
+        # ## Load the entire video file (idx refers to which video to load)
+        # first = read_image(os.path.join(video_dir,f'{1:08d}.jpg')) # determine image shape
+        # image_sequence = torch.zeros( [ground_truth.shape[0]] + list(first.shape))
+        # for i in range(ground_truth.shape[0]):
+        #     image_sequence[i] = read_image(os.path.join(video_dir, f'{i+1:08d}.jpg'))
 
-        return image_sequence,ground_truth
+        # return image_sequence, ground_truth
     
         ## Method 2: Load video sequences of fixed length and resolution
-        # # (Each video would have multiple sequences)
-        # # then batching is easier and we don't have to define a collate function
-        # # then idx would refer to the sequence (might want to track number of sequences in each video so that we can quickly index to the correct video)
-        # image_sequence = torch.zeros((self.frames_per_sequence, 3, 1080, 1920))
+        video_name, sample_idx = self.sample_directories[idx]
+        video_dir = os.path.join(self.base_dir, video_name)
+        start_idx = sample_idx*self.frames_per_sequence
+        end_idx = (sample_idx+1)*self.frames_per_sequence
+        
+        # Load ground Truth labels
+        # Each line of this file is a sequence of 4 floats, separated by commas: x1, y1, x2, y2
+        with open(os.path.join(video_dir,'groundtruth.txt'),'r') as file:
+            ground_truth = torch.tensor([[float(x) for x in line.split(',')] for line in file.readlines() if len(line) != 0])
+            ground_truth = ground_truth[start_idx,end_idx:]
+        
+        # Format the image sequence into the correct resolution and length
+        first_img = self.resize(read_image(os.path.join(video_dir,f'{1:08d}.jpg')))
+        image_sequence = torch.zeros([self.frames_per_sequence] + list(first_img.shape))
+        for i in range(self.frames_per_sequence):
+            image_path = os.path.join(video_dir, f'{start_idx + i+1:08d}.jpg') # add 1 because the first image is 00000001.jpg
+            image_sequence[i] = self.resize(read_image(image_path)) / 255.0 # Normalize
+
+        return image_sequence, ground_truth
+
+
+
+        
+
+
 
 
 """
