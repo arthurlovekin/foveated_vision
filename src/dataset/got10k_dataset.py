@@ -155,6 +155,7 @@ RandomHorizontalFlip
 RandomVerticalFlip
 (use RandomApply to apply all of the above with some probabilities)
 
+TODO: Calculate the mean across all images in the dataset for each color channel (which fits the way resnet was trained)
 
 """
 if __name__ == "__main__":  
@@ -170,5 +171,5 @@ if __name__ == "__main__":
     try:
         print(ds[180])
     except IndexError:
-        print('trying to get the 180th video raises an IndexError')
+        print('trying to get the 181th video raises an IndexError')
 
