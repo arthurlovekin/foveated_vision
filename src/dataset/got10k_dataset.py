@@ -12,7 +12,12 @@ Dataset Properties:
 # min duration (sec): 0.4 (~40 frames)
 # max duration (sec): 148 (~14800 frames)
 # avg duration (sec): 15 (~150 frames)
+
+# 4-second segments: 87% use of frames
+# 5-second segments: 83% use of frames
+# 6-second segments: 75% use of frames
 """
+
 GOT10K_SAMPLE_RATE_HZ = 10 
 
 class GOT10kDataset(Dataset):
@@ -20,7 +25,7 @@ class GOT10kDataset(Dataset):
         A sample consists of a sequence of images of fixed length and resolution, 
         along with a sequence of bounding box labels
     """
-    def __init__(self, base_dir, sample_resolution=(420,420), sample_seconds:int=5) -> None:
+    def __init__(self, base_dir, sample_resolution=(420,420), sample_seconds:int=6) -> None:
         super().__init__()
         self.base_dir = base_dir
         self.frames_per_sequence = sample_seconds * GOT10K_SAMPLE_RATE_HZ
@@ -38,15 +43,18 @@ class GOT10kDataset(Dataset):
         self.sample_directories = [] # list of tuples (video_name, index_from_video_start)
         with open(self.video_list_filepath, 'r') as f:
             self.video_filenames = [line.strip() for line in f.readlines() if len(line.strip()) > 0]
-            self.n_videos = len(os.listdir(self.base_dir))-1 # subtract 1 for list.txt
-            assert len(self.video_filenames) == self.n_videos, f'list.txt has {len(self.video_filenames)} lines, but the directory has {self.n_videos} videos'
+            self.n_videos = len(self.video_filenames)
+            n_videos2 = len(os.listdir(self.base_dir))-1 # subtract 1 for list.txt
+            assert n_videos2 == self.n_videos, f'list.txt has {self.n_videos} lines, but the directory has {n_videos2} videos'
             
         # assign each video an index corresponding to the sample index
         for video_name in self.video_filenames:
             video_dir = os.path.join(self.base_dir, video_name)
             with open(video_dir + '/groundtruth.txt', 'r') as gt_file:
                 n_video_frames = sum(1 for line in gt_file.readlines() if len(line) != 0)
-                assert n_video_frames == (len(os.listdir(video_dir)) - 5), f'Directory {video_dir} has {len(os.listdir(video_dir))} video files + 5 info files, which does not match number of ground-truth bounding boxes ({n_video_frames})'
+                # vvv was triggering because there was 1 additional backup file in the directory
+                # n_video_frames2 = len(os.listdir(video_dir)) - 5 # subtract 5 for info files
+                # assert n_video_frames == n_video_frames2, f'Directory {video_dir} has {n_video_frames2} video files + 5 info files, which does not match number of ground-truth bounding boxes ({n_video_frames})'
                 
                 n_video_samples = n_video_frames // self.frames_per_sequence
                 self.sample_directories += zip( n_video_samples * [video_name],[i for i in range(n_video_samples)])
@@ -100,7 +108,7 @@ class GOT10kDataset(Dataset):
         # Each line of this file is a sequence of 4 floats, separated by commas: x1, y1, x2, y2
         with open(os.path.join(video_dir,'groundtruth.txt'),'r') as file:
             ground_truth = torch.tensor([[float(x) for x in line.split(',')] for line in file.readlines() if len(line) != 0])
-            ground_truth = ground_truth[start_idx,end_idx:]
+            ground_truth = ground_truth[start_idx:end_idx,:]
         
         # Format the image sequence into the correct resolution and length
         first_img = self.resize(read_image(os.path.join(video_dir,f'{1:08d}.jpg')))
@@ -169,7 +177,7 @@ if __name__ == "__main__":
     print(f"Shape of the 180th video (index 179): {ds[179][0].shape}")
     print(f"First few ground truth labels of 4th video: {ds[4][1][:5]}")
     try:
-        print(ds[180])
+        print(ds[len(ds)])
     except IndexError:
-        print('trying to get the 181th video raises an IndexError')
+        print(f'trying to get the {len(ds)+1}th sequence raises an IndexError')
 
