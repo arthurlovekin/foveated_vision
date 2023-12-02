@@ -28,7 +28,7 @@ class FoveationLoss:
         dist = torch.pow(xdist**2  + ydist**2,self.exp/2)
         return dist
 
-# TODO: Make this 
+# TODO(zeichen): can we make the center, height, and width all defined as fractions from 0 to 1 instead of pixels?
 class FoveationModule(nn.Module):
     """
     Given an image tensor and a fixation point, sample points and return the high-resolution foveal patch 
@@ -57,10 +57,10 @@ class FoveationModule(nn.Module):
         left = min(0,self.center[0] - self.width // 2)
         return TF.crop(image, top, left, self.height, self.width) 
 
-    def update_fixation(self, center, width, height):
+    def update_fixation(self, center, width=None, height=None):
         self.center = (center[0], center[1])
-        self.width = width
-        self.height = height
+        self.width = width if width else self.width
+        self.height = height if height else self.height
 
     def forward(self,fixation,image): 
         top = min(0,fixation[1] - self.height // 2)
