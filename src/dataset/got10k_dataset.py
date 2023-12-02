@@ -173,8 +173,9 @@ if __name__ == "__main__":
 
     ds = GOT10kDataset(base_dir)
     print(f"Dataset has {len(ds)} videos")
-    print(f"Shape of 4th video: {ds[4][0].shape}")
-    print(f"Shape of the 180th video (index 179): {ds[179][0].shape}")
+    assert len(ds) == 180, f'Expected 180 videos, but got {len(ds)}'
+    print(f"Shape of 4th sequence: {ds[4][0].shape}")
+    print(f"Shape of the 180th sequence (index 179): {ds[179][0].shape}")
     print(f"First few ground truth labels of 4th video: {ds[4][1][:5]}")
     try:
         print(ds[len(ds)])

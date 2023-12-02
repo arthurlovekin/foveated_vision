@@ -4,6 +4,8 @@ from torchvision.models import resnet50, ResNet50_Weights
 from foveation_module import FoveationModule
 from torchvision.transforms import Resize
 from torchinfo import summary
+import math
+# from typing import Tensor
 
 RESNET_DEFAULT_INPUT_SIZE = (224, 224)
 # TODO: Add positional encoding
@@ -61,31 +63,62 @@ class CombinerModel(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.transformer_model = nn.Transformer(nhead=16, num_encoder_layers=12, num_decoder_layers=0)
-    
+        self.transformer_model = nn.Transformer(
+            nhead=16, num_encoder_layers=12, num_decoder_layers=0
+        )
+
     def make_sequence(self, foveal_features, peripheral_features, fovea_points):
         """
         Creates a sequence of features from the buffers. Transfomer expects
         batch x n x 1 sequence.
         """
-        return torch.cat([foveal_features, peripheral_features, fovea_points], dim=1).unsqueeze(2)
-
+        return torch.cat(
+            [foveal_features, peripheral_features, fovea_points], dim=1
+        ).unsqueeze(2)
 
     def forward(self, peripheral_features, foveal_features, fovea_points):
-        input_sequence = self.make_sequence(foveal_features, peripheral_features, fovea_points)
+        input_sequence = self.make_sequence(
+            foveal_features, peripheral_features, fovea_points
+        )
         return self.transformer_model(input_sequence)
 
+# https://pytorch.org/tutorials/beginner/transformer_tutorial.html
+# https://github.com/tatp22/multidim-positional-encoding for 2d and 3d positional encodings
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        position_encoding = torch.zeros(max_len, 1, d_model)
+        position_encoding[:, 0, 0::2] = torch.sin(position * div_term)
+        position_encoding[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('position_encoding', position_encoding)
+
+    def forward(self, x):
+        """
+        Arguments:
+            x: Tensor, shape ``[seq_len, batch_size, embedding_dim]``
+        """
+        x = x + self.position_encoding[:x.size(0)]
+        return self.dropout(x)
+    
 
 class PeripheralFovealVisionModel(nn.Module):
     def __init__(self, batch_size=1):
         super().__init__()
         self.batch_size = batch_size
-        self.foveation_module = FoveationModule(center=(100, 100), width=20, height=20)
+        self.peripheral_resolution = RESNET_DEFAULT_INPUT_SIZE
+        self.downsampler = Resize(
+            (self.peripheral_resolution[0], self.peripheral_resolution[1]),
+            antialias=True,
+        )
+        self.foveation_module = FoveationModule()
         self.peripheral_model = PeripheralModel()
         self.foveal_model = FovealModel()
         self.combiner_model = CombinerModel()
         self.position_encoding = None
-        self.current_fixation = None
+        self.current_fixation = torch.ones((self.batch_size, 2), dtype=torch.float32)*0.5
         self.foveal_feature_buffer = None
         self.peripheral_feature_buffer = None
         self.fovea_point_buffer = None
@@ -106,55 +139,49 @@ class PeripheralFovealVisionModel(nn.Module):
             (self.batch_size, self.buffer_len, self.feature_len), dtype=torch.float32
         )
 
-    def forward(self, current_image, fovea_stack):
+    def forward(self, current_image):
         # Extract features from the peripheral image
-        background_img = self.downsample_periphery(current_image)
+        background_img = self.downsampler(current_image)
         peripheral_feature = self.peripheral_model(background_img)
 
         # Add the peripheral feature to the buffer
-        self.peripheral_feature_buffer = torch.cat(
-            [peripheral_feature, self.peripheral_feature_buffer], dim=0
+        self.peripheral_feature_buffer = self.add_vector_to_buffer(
+            peripheral_feature, self.peripheral_feature_buffer
         )
-        # Pop the oldest peripheral feature from the buffer
-        peripheral_features = self.peripheral_feature_buffer[-self.buffer_len :]
 
-        foveal_patch = self.foveation_module.sample_fovea(
-            current_image, self.current_fixation
+        foveal_patch = self.foveation_module(
+            self.current_fixation, current_image
         )
+        print(f"Foveal patch shape: {foveal_patch.shape}")
 
         # Extract features from the foveal patch
         foveal_feature = self.foveal_model(foveal_patch)
 
         # Add the foveal feature to the buffer
-        self.foveal_feature_buffer = torch.cat(
-            [foveal_feature, self.foveal_feature_buffer], dim=0
+        self.foveal_feature_buffer = self.add_vector_to_buffer(
+            foveal_feature, self.foveal_feature_buffer
         )
-        # Pop the oldest foveal feature from the buffer
-        foveal_features = self.foveal_feature_buffer[-self.buffer_len :]
 
         # Add the fovea point to the buffer
-        self.fovea_point_buffer = torch.cat(
-            [self.current_fixation, self.fovea_point_buffer], dim=0
+        self.fovea_point_buffer = self.add_vector_to_buffer(
+            self.current_fixation, self.fovea_point_buffer
         )
-        # Pop the oldest fovea point from the buffer
-        fovea_points = self.fovea_point_buffer[-self.buffer_len :]
 
         # Combine and produce a bounding box + fixation point
-        output = self.combiner_model(
-            peripheral_features, foveal_features, fovea_points
-        )
-
-        # Update the buffers
-        self.foveal_feature_buffer = foveal_features
-        self.peripheral_feature_buffer = peripheral_features
-        self.fovea_point_buffer = fovea_points
+        # TODO(rgg): output current fixation
+        output = self.combiner_model(self.peripheral_feature_buffer, self.foveal_feature_buffer, self.fovea_point_buffer)
 
         return output
-
-    def downsample_periphery(self, image, target_resolution=RESNET_DEFAULT_INPUT_SIZE):
-        return Resize(
-            image, (target_resolution[0], target_resolution[1]), antialias=True
-        )
+    
+    def add_vector_to_buffer(self, vector, buffer):
+        """
+        Adds a vector to the buffer, popping the oldest vector in the buffer.
+        Assumes the buffer is of shape (batch, buffer_len, feature_len).
+        """
+        print(f"Adding vector of shape {vector.shape} to buffer of shape {buffer.shape}")
+        print(f"Unsqueezed vector shape: {vector.unsqueeze(1).shape}")
+        buffer = torch.cat([vector.unsqueeze(1), buffer], dim=1)
+        return buffer[-self.buffer_len :]
 
 
 if __name__ == "__main__":
@@ -162,11 +189,10 @@ if __name__ == "__main__":
     # print("Peripheral model summary:")
     # print(summary(model))
 
-    model = PeripheralFovealVisionModel()
+    batch_size=2
+    model = PeripheralFovealVisionModel(batch_size=batch_size)
     print("Model summary:")
     print(summary(model))
-    
-    batch_size = 1
-    test_input = torch.randn(1, 3, 224,224)
-    print(f"Output from test input {model(test_input).shape}")
 
+    test_input = torch.randn(batch_size, 3, 224, 224)
+    print(f"Output from test input {model(test_input).shape}")
