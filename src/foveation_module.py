@@ -56,9 +56,9 @@ class FoveationModule(nn.Module):
 
         print('\n')
 
-        print("Image shape: ", image.shape)
-        print("Fixation shape: ",fixation.shape)
-        print("Requested shape vector: ", shape)
+        # print("Image shape: ", image.shape)
+        # print("Fixation shape: ",fixation.shape)
+        # print("Requested shape vector: ", shape)
         image_xshape, image_yshape = image.shape[-2], image.shape[-1]
         if shape is None: 
             fix_shape = fixation.shape
@@ -72,9 +72,9 @@ class FoveationModule(nn.Module):
         top_vec = torch.min(torch.max(torch.zeros_like(fixation[...,0]),fixation[...,1]*image_yshape - heights // 2) , image_yshape -heights)
         
         cropped =  torch.cat([TF.crop(image[i:i+1], int(top), int(left),int(width),int(height)) for i,(top,left,width,height) in enumerate(zip(list(left_vec), list(top_vec),list(widths),list(heights)))],dim=0)
-        print("cropped image shape: ",cropped.shape)
+        # print("cropped image shape: ",cropped.shape)
         resized =  self.resize(cropped)
-        print("Out resized image shape: ", resized.shape)
+        # print("Out resized image shape: ", resized.shape)
         return resized
         
 

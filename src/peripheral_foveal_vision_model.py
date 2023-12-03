@@ -82,7 +82,7 @@ class CombinerModel(nn.Module):
     combines them to produce a bounding box and new fixation point.
     """
 
-    def __init__(self, n_inputs: int=2048, n_heads: int=16,
+    def __init__(self, n_inputs: int=4098, n_heads: int=6,
                  n_encoder_layers: int=12, dropout: float = 0.1):
         super().__init__()
         self.positional_encoding = PositionalEncoding(n_inputs,dropout)
@@ -101,11 +101,15 @@ class CombinerModel(nn.Module):
             [foveal_features, peripheral_features, fovea_points], dim=1
         ).unsqueeze(2)
 
-    def forward(self, peripheral_features, foveal_features, fovea_points):
-        input_sequence = self.make_sequence(
-            foveal_features, peripheral_features, fovea_points
-        )
-        return self.transformer_model(input_sequence)
+    # def forward(self, peripheral_features, foveal_features, fovea_points):
+    #     input_sequence = self.make_sequence(
+    #         foveal_features, peripheral_features, fovea_points
+    #     )
+    #     return self.transformer_model(input_sequence)
+    
+    def forward(self, all_features_buffer):
+        positional_features = self.positional_encoding(all_features_buffer)
+        return self.transformer_model(positional_features)
 
 
 
@@ -132,6 +136,8 @@ class PeripheralFovealVisionModel(nn.Module):
         # Initialize the buffers
         self.reset_buffers()
 
+        self.buffer = torch.zeros(self.batch_size, self.buffer_len, self.feature_len*2+2, dtype=torch.float32)
+
     def reset_buffers(self):
         # Initialize the buffers with zeros
         self.foveal_feature_buffer = torch.zeros(
@@ -148,35 +154,57 @@ class PeripheralFovealVisionModel(nn.Module):
         # Extract features from the peripheral image
         background_img = self.downsampler(current_image)
         peripheral_feature = self.peripheral_model(background_img)
+        print(f"Peripheral feature shape: {peripheral_feature.shape}")
 
-        # Add the peripheral feature to the buffer
-        self.peripheral_feature_buffer = self.add_vector_to_buffer(
-            peripheral_feature, self.peripheral_feature_buffer
-        )
-
+        # Extract features from the foveal patch
         foveal_patch = self.foveation_module(
             self.current_fixation, current_image
         )
-        print(f"Foveal patch shape: {foveal_patch.shape}")
-
-        # Extract features from the foveal patch
+        # print(f"Foveal patch shape: {foveal_patch.shape}")
         foveal_feature = self.foveal_model(foveal_patch)
+        print(f"Foveal feature shape: {foveal_feature.shape}")
 
-        # Add the foveal feature to the buffer
-        self.foveal_feature_buffer = self.add_vector_to_buffer(
-            foveal_feature, self.foveal_feature_buffer
-        )
+        # fixation_reshaped = self.current_fixation.reshape((self.batch_size, -1))
+        print(f"Current fixation shape: {self.current_fixation.shape}")
 
-        # Add the fovea point to the buffer
-        self.fovea_point_buffer = self.add_vector_to_buffer(
-            self.current_fixation, self.fovea_point_buffer
-        )
+        # Add the current fixation to the buffer
+        all_features = torch.cat([peripheral_feature, foveal_feature, self.current_fixation], dim=1)
+        print(f"All features shape: {all_features.shape}")
+        temp_buffer = torch.cat([all_features.unsqueeze(1), self.buffer], dim=1)
+        print(f"Temp buffer shape: {temp_buffer.shape}")
+        self.buffer = temp_buffer[:, :self.buffer_len, :]
+        print(f"Buffer shape: {self.buffer.shape}")
 
-        # Combine and produce a bounding box + fixation point
-        # TODO(rgg): output current fixation
-        output = self.combiner_model(self.peripheral_feature_buffer, self.foveal_feature_buffer, self.fovea_point_buffer)
+        output = self.combiner_model(self.buffer)
+        # # Add the peripheral feature to the buffer
+        # self.peripheral_feature_buffer = self.add_vector_to_buffer(
+        #     peripheral_feature, self.peripheral_feature_buffer
+        # )
+        # # Add the foveal feature to the buffer
+        # self.foveal_feature_buffer = self.add_vector_to_buffer(
+        #     foveal_feature, self.foveal_feature_buffer
+        # )
+
+        # # Add the fovea point to the buffer
+        # self.fovea_point_buffer = self.add_vector_to_buffer(
+        #     self.current_fixation, self.fovea_point_buffer
+        # )
+
+        # # Combine and produce a bounding box + fixation point
+        # # TODO(rgg): output current fixation
+        # output = self.combiner_model(self.peripheral_feature_buffer, self.foveal_feature_buffer, self.fovea_point_buffer)
 
         return output
+    
+    # def add_to_buffer(self, all_features):
+    #     """
+    #     Adds a vector to the buffer, popping the oldest vector in the buffer.
+    #     Assumes the buffer is of shape (batch, buffer_len, all_feature_len).
+    #     ()
+    #     """
+
+    #     self.buffer = torch.cat([all_features.unsqueeze(1), self.buffer], dim=1)
+    #     return self.buffer[-self.buffer_len :]
     
     def add_vector_to_buffer(self, vector, buffer):
         """
