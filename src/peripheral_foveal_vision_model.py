@@ -83,7 +83,7 @@ class CombinerModel(nn.Module):
     """
 
     def __init__(self, buffer_size=3, n_inputs: int=4098, n_heads: int=6,
-                 n_encoder_layers: int=12, dropout: float = 0.1):
+                 n_encoder_layers: int=4, dropout: float = 0.1):
         """
         Args:
             buffer_size (int): Number of previous frames to consider
@@ -93,16 +93,22 @@ class CombinerModel(nn.Module):
             dropout (float): Dropout probability
         """
         super().__init__()
-        self.sequence_dim = buffer_size*n_inputs
-        self.positional_encoding = PositionalEncoding(self.sequence_dim,dropout)
+        self.positional_encoding = PositionalEncoding(n_inputs,dropout)
         # self.transformer_model = nn.Transformer(
         #     nhead=n_heads, num_encoder_layers=n_encoder_layers, num_decoder_layers=0
         # )
-        self.transformer_encoder_layer = nn.TransformerEncoderLayer(d_model=self.sequence_dim, nhead=n_heads, dim_feedforward=2048, dropout=dropout)
+        self.transformer_encoder_layer = nn.TransformerEncoderLayer(d_model=n_inputs, nhead=n_heads, dim_feedforward=2048, dropout=dropout, batch_first=True)
         self.transformer_model = nn.TransformerEncoder(encoder_layer=self.transformer_encoder_layer, num_layers=n_encoder_layers) # (contains multiple TransformerEncoderLayers)
+        # Map the encoded sequence to a bounding box.
+        # This really shouldn't be done like this; we should use a decoder,
+        # and the output should be a sequence of bounding boxes (with a loss on each one).
+        self.sequence_dim = buffer_size*n_inputs
+        self.bbox_head = nn.Linear(self.sequence_dim, 4)  
+        self.pos_head = nn.Linear(4, 2)  
 
     def make_sequence(self, foveal_features, peripheral_features, fovea_points):
         """
+        Deprecated?
         Creates a sequence of features from the buffers. Transfomer expects sequence of shape 
         (batch, n, 1) sequence. ??(seq_len, batch, feature_len)??
         """
@@ -117,10 +123,17 @@ class CombinerModel(nn.Module):
     #     return self.transformer_model(input_sequence)
     
     def forward(self, all_features_buffer):
+        # Transformer expects input of shape (batch, seq_len, feature_len)
         # Concatenate all features along the time dimension
-        flat_all_features = all_features_buffer.reshape((batch_size, -1))
-        positional_features = self.positional_encoding(flat_all_features)
-        return self.transformer_model(positional_features)
+        positional_features = self.positional_encoding(all_features_buffer)
+        print(f"Transformer input shape: {positional_features.shape}")
+        latent_seq = self.transformer_model(positional_features)
+        # Hack decoder
+        # Flatten the sequence
+        latent_seq = latent_seq.reshape((latent_seq.shape[0], -1))
+        bbox = self.bbox_head(latent_seq)
+        pos = self.pos_head(bbox)
+        return bbox, pos 
 
 
 class PeripheralFovealVisionModel(nn.Module):
@@ -161,6 +174,10 @@ class PeripheralFovealVisionModel(nn.Module):
         )
 
     def forward(self, current_image):
+        """
+        Args:
+            current_image (torch.tensor): (batch, channels, height, width) image
+        """
         # Extract features from the peripheral image
         background_img = self.downsampler(current_image)
         peripheral_feature = self.peripheral_model(background_img)
@@ -185,7 +202,9 @@ class PeripheralFovealVisionModel(nn.Module):
         self.buffer = temp_buffer[:, :self.buffer_len, :]
         print(f"Buffer shape: {self.buffer.shape}")
 
-        output = self.combiner_model(self.buffer)
+        bbox, self.current_fixation = self.combiner_model(self.buffer)
+
+        # Deprecated?: track separate buffers, would be nice to have for debugging
         # # Add the peripheral feature to the buffer
         # self.peripheral_feature_buffer = self.add_vector_to_buffer(
         #     peripheral_feature, self.peripheral_feature_buffer
@@ -199,12 +218,7 @@ class PeripheralFovealVisionModel(nn.Module):
         # self.fovea_point_buffer = self.add_vector_to_buffer(
         #     self.current_fixation, self.fovea_point_buffer
         # )
-
-        # # Combine and produce a bounding box + fixation point
-        # # TODO(rgg): output current fixation
-        # output = self.combiner_model(self.peripheral_feature_buffer, self.foveal_feature_buffer, self.fovea_point_buffer)
-
-        return output
+        return bbox
     
     # def add_to_buffer(self, all_features):
     #     """
