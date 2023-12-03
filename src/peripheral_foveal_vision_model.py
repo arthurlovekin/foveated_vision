@@ -137,9 +137,9 @@ class CombinerModel(nn.Module):
 
 
 class PeripheralFovealVisionModel(nn.Module):
-    def __init__(self, batch_size=1):
+    def __init__(self):#, batch_size=1):
         super().__init__()
-        self.batch_size = batch_size
+        # self.batch_size = batch_size
         self.peripheral_resolution = RESNET_DEFAULT_INPUT_SIZE
         self.downsampler = Resize(
             (self.peripheral_resolution[0], self.peripheral_resolution[1]),
@@ -150,34 +150,41 @@ class PeripheralFovealVisionModel(nn.Module):
         self.foveal_model = FovealModel()
         self.combiner_model = CombinerModel()
         self.position_encoding = None
-        self.current_fixation = torch.ones((self.batch_size, 2), dtype=torch.float32)*0.5
-        self.foveal_feature_buffer = None
-        self.peripheral_feature_buffer = None
-        self.fovea_point_buffer = None
+        self.fixation_length = 2
+        self.current_fixation = None #torch.ones((self.batch_size, self.fixation_length), dtype=torch.float32)*0.5
+        self.feature_len = 2048*2+self.fixation_length # 2x resnet output + 2 for center of fixation (TODO: Make this dynamic)
         self.buffer_len = 3
-        self.feature_len = 2048  # For extracted periperal and foveal features
-        # Initialize the buffers
-        self.reset_buffers()
+        self.buffer = None #torch.zeros(self.batch_size, self.buffer_len, self.feature_len, dtype=torch.float32)
+        
+    #     self.foveal_feature_buffer = None
+    #     self.peripheral_feature_buffer = None
+    #     self.fovea_point_buffer = None
+    #     # Initialize the buffers
+    #     self.reset_buffers()
 
-        self.buffer = torch.zeros(self.batch_size, self.buffer_len, self.feature_len*2+2, dtype=torch.float32)
 
-    def reset_buffers(self):
-        # Initialize the buffers with zeros
-        self.foveal_feature_buffer = torch.zeros(
-            (self.batch_size, self.buffer_len, self.feature_len), dtype=torch.float32
-        )
-        self.fovea_point_buffer = torch.zeros(
-            (self.batch_size, self.buffer_len, 2), dtype=torch.float32
-        )
-        self.peripheral_feature_buffer = torch.zeros(
-            (self.batch_size, self.buffer_len, self.feature_len), dtype=torch.float32
-        )
+    # def reset_buffers(self, batched_image):
+    #     # Initialize the buffers with zeros
+    #     self.foveal_feature_buffer = torch.zeros(
+    #         (self.batch_size, self.buffer_len, self.feature_len), dtype=torch.float32
+    #     )
+    #     self.fovea_point_buffer = torch.zeros(
+    #         (self.batch_size, self.buffer_len, 2), dtype=torch.float32
+    #     )
+    #     self.peripheral_feature_buffer = torch.zeros(
+    #         (self.batch_size, self.buffer_len, self.feature_len), dtype=torch.float32
+    #     )
 
     def forward(self, current_image):
         """
         Args:
             current_image (torch.tensor): (batch, channels, height, width) image
         """
+        # Initialize the current fixation if necessary
+        if self.current_fixation is None:
+            batch_size = current_image.shape[0]
+            self.current_fixation = torch.ones((batch_size, self.fixation_length), dtype=torch.float32)*0.5
+
         # Extract features from the peripheral image
         background_img = self.downsampler(current_image)
         peripheral_feature = self.peripheral_model(background_img)
@@ -187,16 +194,20 @@ class PeripheralFovealVisionModel(nn.Module):
         foveal_patch = self.foveation_module(
             self.current_fixation, current_image
         )
-        # print(f"Foveal patch shape: {foveal_patch.shape}")
+        print(f"Foveal patch shape: {foveal_patch.shape}")
         foveal_feature = self.foveal_model(foveal_patch)
         print(f"Foveal feature shape: {foveal_feature.shape}")
 
-        # fixation_reshaped = self.current_fixation.reshape((self.batch_size, -1))
         print(f"Current fixation shape: {self.current_fixation.shape}")
 
         # Add the current fixation to the buffer
         all_features = torch.cat([peripheral_feature, foveal_feature, self.current_fixation], dim=1)
         print(f"All features shape: {all_features.shape}")
+
+        # Initialize the buffer if necessary 
+        if self.buffer is None:
+            self.buffer = (torch.rand_like(all_features.unsqueeze(1).expand(-1,self.buffer_len,-1), dtype=torch.float32)-0.5)*0.1
+        
         temp_buffer = torch.cat([all_features.unsqueeze(1), self.buffer], dim=1)
         print(f"Temp buffer shape: {temp_buffer.shape}")
         self.buffer = temp_buffer[:, :self.buffer_len, :]
@@ -230,25 +241,25 @@ class PeripheralFovealVisionModel(nn.Module):
     #     self.buffer = torch.cat([all_features.unsqueeze(1), self.buffer], dim=1)
     #     return self.buffer[-self.buffer_len :]
     
-    def add_vector_to_buffer(self, vector, buffer):
-        """
-        Adds a vector to the buffer, popping the oldest vector in the buffer.
-        Assumes the buffer is of shape (batch, buffer_len, feature_len).
-        """
-        print(f"Adding vector of shape {vector.shape} to buffer of shape {buffer.shape}")
-        print(f"Unsqueezed vector shape: {vector.unsqueeze(1).shape}")
-        buffer = torch.cat([vector.unsqueeze(1), buffer], dim=1)
-        return buffer[-self.buffer_len :]
+    # def add_vector_to_buffer(self, vector, buffer):
+    #     """
+    #     Adds a vector to the buffer, popping the oldest vector in the buffer.
+    #     Assumes the buffer is of shape (batch, buffer_len, feature_len).
+    #     """
+    #     print(f"Adding vector of shape {vector.shape} to buffer of shape {buffer.shape}")
+    #     print(f"Unsqueezed vector shape: {vector.unsqueeze(1).shape}")
+    #     buffer = torch.cat([vector.unsqueeze(1), buffer], dim=1)
+    #     return buffer[-self.buffer_len :]
 
 
 if __name__ == "__main__":
     # model = PeripheralModel()
     # print("Peripheral model summary:")
     # print(summary(model))
-    batch_size=2
+    batch_size=5
     test_input = torch.randn(batch_size, 3, 224, 224)
     print(f"Test input shape: {test_input.shape}")
-    model = PeripheralFovealVisionModel(batch_size=batch_size)
+    model = PeripheralFovealVisionModel()#batch_size=batch_size)
     print("Model summary:")
     print(summary(model))
 
