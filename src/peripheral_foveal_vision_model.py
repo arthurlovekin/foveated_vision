@@ -8,8 +8,6 @@ import math
 # from typing import Tensor
 
 RESNET_DEFAULT_INPUT_SIZE = (224, 224)
-# TODO: Add positional encoding
-
 
 class PeripheralModel(nn.Module):
     """
@@ -54,34 +52,6 @@ class FovealModel(nn.Module):
         # output: (batch, 2048) feature vector
         return self.pretrained(foveal_patch)
 
-
-class CombinerModel(nn.Module):
-    """
-    Takes buffers of foveal features, peripheral features, and fovea points, and
-    combines them to produce a bounding box and fixation point.
-    """
-
-    def __init__(self):
-        super().__init__()
-        self.transformer_model = nn.Transformer(
-            nhead=16, num_encoder_layers=12, num_decoder_layers=0
-        )
-
-    def make_sequence(self, foveal_features, peripheral_features, fovea_points):
-        """
-        Creates a sequence of features from the buffers. Transfomer expects
-        batch x n x 1 sequence.
-        """
-        return torch.cat(
-            [foveal_features, peripheral_features, fovea_points], dim=1
-        ).unsqueeze(2)
-
-    def forward(self, peripheral_features, foveal_features, fovea_points):
-        input_sequence = self.make_sequence(
-            foveal_features, peripheral_features, fovea_points
-        )
-        return self.transformer_model(input_sequence)
-
 # https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 # https://github.com/tatp22/multidim-positional-encoding for 2d and 3d positional encodings
 class PositionalEncoding(nn.Module):
@@ -96,12 +66,42 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('position_encoding', position_encoding)
 
     def forward(self, x):
-        """
-        Arguments:
-            x: Tensor, shape ``[seq_len, batch_size, embedding_dim]``
+        """ x: Tensor, shape ``[seq_len, batch_size, embedding_dim]``
         """
         x = x + self.position_encoding[:x.size(0)]
         return self.dropout(x)
+
+class CombinerModel(nn.Module):
+    """
+    Takes buffers of foveal features, peripheral features, and fovea points, and
+    combines them to produce a bounding box and new fixation point.
+    """
+
+    def __init__(self, d_model: int=12, n_heads: int=16,
+                 n_encoder_layers: int=12, dropout: float = 0.1):
+        super().__init__()
+        self.positional_encoding = PositionalEncoding(d_model,dropout)
+        self.transformer_model = nn.Transformer(
+            nhead=n_heads, num_encoder_layers=n_encoder_layers, num_decoder_layers=0
+        )
+        # self.transformer_model = nn.TransformerEncoder(d_model, n_heads) # (contains multiple TransformerEncoderLayers)
+
+    def make_sequence(self, foveal_features, peripheral_features, fovea_points):
+        """
+        Creates a sequence of features from the buffers. Transfomer expects sequence of shape 
+        (batch, n, 1) sequence. ??(seq_len, batch, feature_len)??
+        """
+        return torch.cat(
+            [foveal_features, peripheral_features, fovea_points], dim=1
+        ).unsqueeze(2)
+
+    def forward(self, peripheral_features, foveal_features, fovea_points):
+        input_sequence = self.make_sequence(
+            foveal_features, peripheral_features, fovea_points
+        )
+        return self.transformer_model(input_sequence)
+
+
     
 
 class PeripheralFovealVisionModel(nn.Module):
