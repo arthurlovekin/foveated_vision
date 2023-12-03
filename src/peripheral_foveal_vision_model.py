@@ -229,7 +229,7 @@ class PeripheralFovealVisionModel(nn.Module):
         # self.fovea_point_buffer = self.add_vector_to_buffer(
         #     self.current_fixation, self.fovea_point_buffer
         # )
-        return bbox
+        return bbox, self.current_fixation
     
     # def add_to_buffer(self, all_features):
     #     """
@@ -263,4 +263,8 @@ if __name__ == "__main__":
     print("Model summary:")
     print(summary(model))
 
-    print(f"Output from test input {model(test_input).shape}")
+    bbox, fixation = model(test_input)
+    print(f"Output from test input:")
+    print(f"    Current bbox shape {bbox.shape}")
+    print(f"    Current fixation shape {fixation.shape}")
+

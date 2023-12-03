@@ -6,11 +6,12 @@ from torch.utils.tensorboard import SummaryWriter
 from dataset.vot_dataset import *
 from dataset.got10k_dataset import *
 from peripheral_foveal_vision_model import PeripheralFovealVisionModel
-from loss_functions import PeripheralFovealVisionModelLoss
+from loss_functions import PeripheralFovealVisionModelLoss, IntersectionOverUnionLoss
+import tqdm
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-num_epochs = 10
+num_epochs = 3
 batch_size_train = 4
 batch_size_test = 100
 learning_rate = 0.01
@@ -21,8 +22,8 @@ random_seed = 1
 torch.backends.cudnn.enabled = False
 torch.manual_seed(random_seed)
 
-train_loader = get_dataloader(batch_size=1, targ_size=(224, 224))
-test_loader = get_dataloader(batch_size=1, targ_size=(224, 224))
+train_loader = get_dataloader(batch_size=batch_size_train, targ_size=(224, 224))
+test_loader = get_dataloader(batch_size=batch_size_test, targ_size=(224, 224))
 
 # Load the model
 model = PeripheralFovealVisionModel()
@@ -34,12 +35,7 @@ model = PeripheralFovealVisionModel()
 # Set the model to run on the device
 model = model.to(device)
 
-# Define the loss function and optimizer
-def iou_loss(box1, box2):
-  # Takes in Tensor[N, 4]s with bounding box corners
-  # Can output single number with reduction or N-element tensor
-  return torchvision.ops.distance_box_iou_loss(box1, box2, reduction='none')
-
+foveation_loss = IntersectionOverUnionLoss() #PeripheralFovealVisionModelLoss()
 ce_loss = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -55,28 +51,44 @@ writer.add_graph(model, images)
 
 # Train the model...
 print(f"Starting training with {num_epochs} epochs, batch size of {batch_size_train}, learning rate {learning_rate}, on device {device}")
-for epoch in range(num_epochs):
-    for input, labels in train_loader:
-        # Move input and label tensors to the device
-        # print(input.shape)
+for epoch in tqdm(range(num_epochs)):
+    total_loss = 0.0
+    total_samples = 0
+
+    progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}", leave=False)
+    for input, labels in progress_bar:
         inputs = inputs.to(device)
         labels = labels.to(device)
+
+        print(f"Input shape: {inputs.shape}")
+        print(f"Label shape: {labels.shape}")
 
         # Zero out the optimizer
         optimizer.zero_grad()
 
         # Forward pass
-        outputs = model(inputs)
-        loss = iou_loss(outputs, labels)
+        outputs = model(inputs) # TODO: outputs will be a tuple of (bbox, fixation)
+        loss = foveation_loss(outputs, labels) # TODO: Also take in the fixation point
+        # # loss = iou_loss(outputs, labels)
 
         # Backward pass
         loss.backward()
         optimizer.step()
 
+
+        total_loss += loss.item()
+        total_samples += labels.shape[0]
+
         # Log training info
         writer.add_scalar('Loss/train', loss, epoch)
 
-    # Print the loss for every epoch
-    print(f'Epoch {epoch+1}/{num_epochs}, Loss: {loss.item():.4f}')
+        progress_bar.set_postfix(
+            loss=f"{total_loss / total_samples:.4f}",
+        )
 
-print(f'Finished Training, Loss: {loss.item():.4f}')
+    progress_bar.close()
+    print(f"Finished epoch {epoch+1}/{num_epochs}, loss: {total_loss / total_samples:.4f}")
+    # print(f'Epoch {epoch+1}/{num_epochs}, Loss: {loss.item():.4f}')
+
+print(f"Finished training, Loss: {total_loss / total_samples:.4f}")
+# print(f'Finished Training, Loss: {loss.item():.4f}')
