@@ -82,14 +82,23 @@ class CombinerModel(nn.Module):
     combines them to produce a bounding box and new fixation point.
     """
 
-    def __init__(self, n_inputs: int=4098, n_heads: int=6,
+    def __init__(self, buffer_size=3, n_inputs: int=4098, n_heads: int=6,
                  n_encoder_layers: int=12, dropout: float = 0.1):
+        """
+        Args:
+            buffer_size (int): Number of previous frames to consider
+            n_inputs (int): Number of input features (peripheral features + foveal features + fovea points)
+            n_heads (int): Number of attention heads. Must evenly divide n_inputs*batch_size
+            n_encoder_layers (int): Number of encoder layers
+            dropout (float): Dropout probability
+        """
         super().__init__()
-        self.positional_encoding = PositionalEncoding(n_inputs,dropout)
+        self.sequence_dim = buffer_size*n_inputs
+        self.positional_encoding = PositionalEncoding(self.sequence_dim,dropout)
         # self.transformer_model = nn.Transformer(
         #     nhead=n_heads, num_encoder_layers=n_encoder_layers, num_decoder_layers=0
         # )
-        self.transformer_encoder_layer = nn.TransformerEncoderLayer(d_model=n_inputs, nhead=n_heads, dim_feedforward=2048, dropout=dropout)
+        self.transformer_encoder_layer = nn.TransformerEncoderLayer(d_model=self.sequence_dim, nhead=n_heads, dim_feedforward=2048, dropout=dropout)
         self.transformer_model = nn.TransformerEncoder(encoder_layer=self.transformer_encoder_layer, num_layers=n_encoder_layers) # (contains multiple TransformerEncoderLayers)
 
     def make_sequence(self, foveal_features, peripheral_features, fovea_points):
@@ -108,9 +117,10 @@ class CombinerModel(nn.Module):
     #     return self.transformer_model(input_sequence)
     
     def forward(self, all_features_buffer):
-        positional_features = self.positional_encoding(all_features_buffer)
+        # Concatenate all features along the time dimension
+        flat_all_features = all_features_buffer.reshape((batch_size, -1))
+        positional_features = self.positional_encoding(flat_all_features)
         return self.transformer_model(positional_features)
-
 
 
 class PeripheralFovealVisionModel(nn.Module):
@@ -221,11 +231,11 @@ if __name__ == "__main__":
     # model = PeripheralModel()
     # print("Peripheral model summary:")
     # print(summary(model))
-
     batch_size=2
+    test_input = torch.randn(batch_size, 3, 224, 224)
+    print(f"Test input shape: {test_input.shape}")
     model = PeripheralFovealVisionModel(batch_size=batch_size)
     print("Model summary:")
     print(summary(model))
 
-    test_input = torch.randn(batch_size, 3, 224, 224)
     print(f"Output from test input {model(test_input).shape}")
