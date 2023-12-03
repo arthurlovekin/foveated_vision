@@ -6,7 +6,7 @@ from torch.utils.tensorboard import SummaryWriter
 from dataset.vot_dataset import *
 from dataset.got10k_dataset import *
 from peripheral_foveal_vision_model import PeripheralFovealVisionModel
-
+from loss_functions import PeripheralFovealVisionModelLoss
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
