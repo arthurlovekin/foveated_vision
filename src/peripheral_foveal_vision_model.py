@@ -55,7 +55,12 @@ class FovealModel(nn.Module):
 # https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 # https://github.com/tatp22/multidim-positional-encoding for 2d and 3d positional encodings
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+    """
+        d_model (int) – the number of expected features in the encoder/decoder inputs
+        dropout (float) – the dropout probability
+        max_len (int) – the maximum length of the input feature
+    """
+    def __init__(self, d_model: int=512, dropout: float = 0.1, max_len: int = 8192):
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
         position = torch.arange(max_len).unsqueeze(1)
@@ -77,14 +82,15 @@ class CombinerModel(nn.Module):
     combines them to produce a bounding box and new fixation point.
     """
 
-    def __init__(self, d_model: int=12, n_heads: int=16,
+    def __init__(self, n_inputs: int=2048, n_heads: int=16,
                  n_encoder_layers: int=12, dropout: float = 0.1):
         super().__init__()
-        self.positional_encoding = PositionalEncoding(d_model,dropout)
-        self.transformer_model = nn.Transformer(
-            nhead=n_heads, num_encoder_layers=n_encoder_layers, num_decoder_layers=0
-        )
-        # self.transformer_model = nn.TransformerEncoder(d_model, n_heads) # (contains multiple TransformerEncoderLayers)
+        self.positional_encoding = PositionalEncoding(n_inputs,dropout)
+        # self.transformer_model = nn.Transformer(
+        #     nhead=n_heads, num_encoder_layers=n_encoder_layers, num_decoder_layers=0
+        # )
+        self.transformer_encoder_layer = nn.TransformerEncoderLayer(d_model=n_inputs, nhead=n_heads, dim_feedforward=2048, dropout=dropout)
+        self.transformer_model = nn.TransformerEncoder(encoder_layer=self.transformer_encoder_layer, num_layers=n_encoder_layers) # (contains multiple TransformerEncoderLayers)
 
     def make_sequence(self, foveal_features, peripheral_features, fovea_points):
         """
@@ -102,7 +108,6 @@ class CombinerModel(nn.Module):
         return self.transformer_model(input_sequence)
 
 
-    
 
 class PeripheralFovealVisionModel(nn.Module):
     def __init__(self, batch_size=1):
