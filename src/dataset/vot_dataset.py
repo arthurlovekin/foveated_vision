@@ -2,8 +2,10 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision.io import read_image
 from torchvision.transforms.v2 import Resize
 import torch
+import torchvision
 from os import path as Path 
 
+torchvision.disable_beta_transforms_warning()
 # /scratch/eecs542s001f23_class_root/eecs542s001f23_class/shared_data/foveated_vision/
 # LaSOT dataset 
 basedir_ = '/scratch/eecs542s001f23_class_root/eecs542s001f23_class/shared_data/group_raz/data/vot/'
