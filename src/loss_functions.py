@@ -34,23 +34,24 @@ class IntersectionOverUnionLoss:
         bb1: [batch]x 4 tensor [xlow, xhigh, ylow,yhigh] 
         bb2: [batch]x 4 tensor [xlow, xhigh, ylow,yhigh] 
         """
-        return torchvision.ops.box_iou(box1, box2, reduction='none')
+        return torchvision.ops.distance_box_iou_loss(box1, box2, reduction='none')
 
 class PeripheralFovealVisionModelLoss:
     def __init__(self):
         self.iou_loss = IntersectionOverUnionLoss()
+        # TODO: Make this independent of the image size?
         self.foveation_loss = FoveationLoss((224,224))
     
-    def __call__(self, curr_bbox, curr_fixation, true_curr_bbox,true_next_bbox):
+    def __call__(self, curr_bbox, next_fixation, true_curr_bbox, true_next_bbox):
         """
         Current version: consists of 2 parts
         1. Intersection over union loss between the current bounding box and the ground-truth current bounding box
-        2. Foveation loss between the current fixation and the ground-truth bounding box (from the next timestep)
+        2. Foveation loss between the next fixation and the ground-truth bounding box (from the next timestep)
         """
         loss_iou = self.iou_loss(curr_bbox, true_curr_bbox)
-        loss_foveation = self.foveation_loss(curr_fixation, true_next_bbox)
+        loss_foveation = self.foveation_loss(next_fixation, true_next_bbox)
+        # TODO: Make this a weighted combination
         return loss_iou + loss_foveation
-    
 
 
 if __name__ == "__main__": 

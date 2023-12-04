@@ -7,13 +7,13 @@ from dataset.vot_dataset import *
 from dataset.got10k_dataset import *
 from peripheral_foveal_vision_model import PeripheralFovealVisionModel
 from loss_functions import PeripheralFovealVisionModelLoss, IntersectionOverUnionLoss
-import tqdm
+from tqdm import tqdm
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 num_epochs = 3
 batch_size_train = 4
-batch_size_test = 100
+batch_size_test = 10
 learning_rate = 0.01
 momentum = 0.5
 log_interval = 10
@@ -35,7 +35,7 @@ model = PeripheralFovealVisionModel()
 # Set the model to run on the device
 model = model.to(device)
 
-foveation_loss = IntersectionOverUnionLoss() #PeripheralFovealVisionModelLoss()
+foveation_loss = PeripheralFovealVisionModelLoss()
 ce_loss = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -43,50 +43,112 @@ optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 writer = SummaryWriter()
 # Show a batch of images
 images, labels = next(iter(train_loader))
-images = images[0, :, :, :, :]  # Remove the batch dimension so we can display
+# images = images[0, :, :, :, :]  # Remove the batch dimension so we can display an entire sequence
+images = images[:, 0, :, :, :]  # Remove the sequence dimension so we can display the first frame for an entire batch
 print(images.shape)
 grid = torchvision.utils.make_grid(images)
 writer.add_image('images', grid, 0)
-writer.add_graph(model, images)
+# writer.add_graph(model, images) # TODO: Fix "RuntimeError: Cannot insert a Tensor that requires grad as a constant. Consider making it a parameter or input, or detaching the gradient"
 
 # Train the model...
 print(f"Starting training with {num_epochs} epochs, batch size of {batch_size_train}, learning rate {learning_rate}, on device {device}")
+model.zero_grad()
+
+class SequenceIterator:
+    """
+    Iterate through the sequence but keep the batch dimension.
+    Iterator class allows us to use tqdm progress bar.
+    """
+    def __init__(self, seq_inputs, seq_labels):
+        """
+        Args:
+            seq_inputs (torch.tensor): (batch, seq_len, channels, height, width) image
+            seq_labels (torch.tensor): (batch, seq_len, 4) bounding box
+        """
+        self.seq_inputs = seq_inputs
+        self.seq_labels = seq_labels
+        self.frame = 0
+        self.num_frames = seq_inputs.shape[1]
+    
+    def __iter__(self):
+        return self
+    
+    def __next__(self):
+        if self.frame >= self.num_frames:
+            raise StopIteration
+        inputs = self.seq_inputs[:, self.frame, :, :, :]
+        labels = self.seq_labels[:, self.frame, :]
+        self.frame += 1
+        return inputs, labels
+
 for epoch in tqdm(range(num_epochs)):
     total_loss = 0.0
     total_samples = 0
 
-    progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}", leave=False)
-    for input, labels in progress_bar:
-        inputs = inputs.to(device)
-        labels = labels.to(device)
-
-        print(f"Input shape: {inputs.shape}")
-        print(f"Label shape: {labels.shape}")
-
+    epoch_progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}", leave=False)
+    for seq_inputs, seq_labels in epoch_progress_bar:
         # Zero out the optimizer
         optimizer.zero_grad()
+        model.zero_grad()
 
-        # Forward pass
-        outputs = model(inputs) # TODO: outputs will be a tuple of (bbox, fixation)
-        loss = foveation_loss(outputs, labels) # TODO: Also take in the fixation point
-        # # loss = iou_loss(outputs, labels)
+        # Each iteration is a batch of sequences of images
+        frame = 0
+        num_frames = len(seq_inputs)
+        curr_inputs = None  # Train on these so we have access to the "next" fixation
+        curr_labels = None
+        # Iterate through the sequence and train on each one
+        seq_iterator = SequenceIterator(seq_inputs, seq_labels)
+        frame_progress_bar = tqdm(seq_iterator, desc=f"Step {frame+1}/{num_frames}", leave=False)
+        for inputs, labels in frame_progress_bar: 
+            # Each iteration is a batch of sequences of images
+            # Iterate through the sequence and train on each one
+            if curr_inputs is None or curr_labels is None:
+                curr_inputs = inputs.to(device)
+                curr_labels = labels.to(device)
+                continue
+            
+            # print(f"Current frame input shape: {curr_inputs.shape}")
 
-        # Backward pass
-        loss.backward()
+            next_inputs = inputs.to(device)
+            next_labels = labels.to(device)
+
+            # print(f"Input shape: {curr_inputs.shape}")
+            # print(f"Label shape: {curr_labels.shape}")
+
+
+            # Forward pass
+            # Run on the "current" frame to generate fixation for the "next" inputs (popped in the current iteration)
+            curr_bbox, next_fixation = model(curr_inputs)
+            loss = foveation_loss(curr_bbox, next_fixation, curr_labels, next_labels) # TODO: Also take in the fixation point
+            loss = loss/num_frames
+
+            # Backward pass to accumulate gradients
+            # https://stackoverflow.com/questions/53331540/accumulating-gradients
+            loss.backward()
+
+            # TODO: are these correct/meaningful?
+            total_loss += loss.item()
+            total_samples += curr_labels.shape[0]
+
+            # Save current frame for next iteration
+            curr_inputs = next_inputs
+            curr_labels = next_labels
+            frame += 1
+
+        epoch_progress_bar.set_postfix(
+            loss=f"{total_loss / total_samples:.4f}",
+        )
+
+        # Update the weights
         optimizer.step()
-
-
-        total_loss += loss.item()
-        total_samples += labels.shape[0]
 
         # Log training info
         writer.add_scalar('Loss/train', loss, epoch)
 
-        progress_bar.set_postfix(
-            loss=f"{total_loss / total_samples:.4f}",
-        )
+        # TODO: Evaluate on test set
+        # TODO: Save checkpoint
 
-    progress_bar.close()
+    epoch_progress_bar.close()
     print(f"Finished epoch {epoch+1}/{num_epochs}, loss: {total_loss / total_samples:.4f}")
     # print(f'Epoch {epoch+1}/{num_epochs}, Loss: {loss.item():.4f}')
 

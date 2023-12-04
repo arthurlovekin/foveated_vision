@@ -106,22 +106,6 @@ class CombinerModel(nn.Module):
         self.bbox_head = nn.Linear(self.sequence_dim, 4)  
         self.pos_head = nn.Linear(4, 2)  
 
-    def make_sequence(self, foveal_features, peripheral_features, fovea_points):
-        """
-        Deprecated?
-        Creates a sequence of features from the buffers. Transfomer expects sequence of shape 
-        (batch, n, 1) sequence. ??(seq_len, batch, feature_len)??
-        """
-        return torch.cat(
-            [foveal_features, peripheral_features, fovea_points], dim=1
-        ).unsqueeze(2)
-
-    # def forward(self, peripheral_features, foveal_features, fovea_points):
-    #     input_sequence = self.make_sequence(
-    #         foveal_features, peripheral_features, fovea_points
-    #     )
-    #     return self.transformer_model(input_sequence)
-    
     def forward(self, all_features_buffer):
         # Transformer expects input of shape (batch, seq_len, feature_len)
         # Concatenate all features along the time dimension
@@ -155,7 +139,7 @@ class PeripheralFovealVisionModel(nn.Module):
         self.feature_len = 2048*2+self.fixation_length # 2x resnet output + 2 for center of fixation (TODO: Make this dynamic)
         self.buffer_len = 3
         self.buffer = None #torch.zeros(self.batch_size, self.buffer_len, self.feature_len, dtype=torch.float32)
-        
+
     def forward(self, current_image):
         """
         Args:
@@ -163,8 +147,8 @@ class PeripheralFovealVisionModel(nn.Module):
         """
         # Initialize the current fixation if necessary
         if self.current_fixation is None:
-            batch_size = current_image.shape[0]
-            self.current_fixation = torch.ones((batch_size, self.fixation_length), dtype=torch.float32)*0.5
+            self.batch_size = current_image.shape[0]
+            self.current_fixation = torch.ones((self.batch_size, self.fixation_length), dtype=torch.float32)*0.5
 
         # Extract features from the peripheral image
         background_img = self.downsampler(current_image)
@@ -178,7 +162,6 @@ class PeripheralFovealVisionModel(nn.Module):
         print(f"Foveal patch shape: {foveal_patch.shape}")
         foveal_feature = self.foveal_model(foveal_patch)
         print(f"Foveal feature shape: {foveal_feature.shape}")
-
         print(f"Current fixation shape: {self.current_fixation.shape}")
 
         # Add the current fixation to the buffer
