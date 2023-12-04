@@ -9,7 +9,10 @@ from peripheral_foveal_vision_model import PeripheralFovealVisionModel
 from loss_functions import PeripheralFovealVisionModelLoss, IntersectionOverUnionLoss
 from tqdm import tqdm
 import logging
-logging.basicConfig(level=logging.DEBUG)
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)  # Change this to INFO or WARNING to reduce verbosity
+
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
