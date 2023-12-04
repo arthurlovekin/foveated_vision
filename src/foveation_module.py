@@ -22,7 +22,7 @@ class FoveationModule(nn.Module):
         self.out_width = out_width
         self.out_height = out_height
         self.n_fixations = n_fixations
-        self.resize = Resize((out_width,out_height))
+        self.resize = Resize((out_width,out_height), antialias=True)
 
     def forward(self,fixation,image, shape=None): 
         """
