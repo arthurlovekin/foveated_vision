@@ -11,13 +11,13 @@ from tqdm import tqdm
 import logging
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)  # Change this to INFO or WARNING to reduce verbosity
+logging.basicConfig(level=logging.INFO)  # Change this to INFO or WARNING to reduce verbosity, or DEBUG for max spam
 
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 num_epochs = 3
-batch_size_train = 1
+batch_size_train = 2
 batch_size_test = 10
 learning_rate = 0.01
 momentum = 0.5
@@ -102,7 +102,7 @@ for epoch in tqdm(range(num_epochs)):
         curr_labels = None
         # Iterate through the sequence and train on each one
         seq_iterator = SequenceIterator(seq_inputs, seq_labels)
-        frame_progress_bar = tqdm(seq_iterator, total=num_frames, desc=f"Step {step+1} progress", position=1, leave=False)
+        frame_progress_bar = tqdm(seq_iterator, total=num_frames, desc=f"Step {step+1} progress", position=1, leave=None)
         for inputs, labels in frame_progress_bar: 
             # Each iteration is a batch of sequences of images
             # Iterate through the sequence and train on each one
@@ -120,12 +120,15 @@ for epoch in tqdm(range(num_epochs)):
             # Forward pass
             # Run on the "current" frame to generate fixation for the "next" inputs (popped in the current iteration)
             curr_bbox, next_fixation = model(curr_inputs)
+            logging.info(f"Current bbox: {curr_bbox}")
+            logging.info(f"Next fixation: {next_fixation}")
             loss = foveation_loss(curr_bbox, next_fixation, curr_labels, next_labels) # TODO: Also take in the fixation point
             loss = loss/num_frames
 
             # Backward pass to accumulate gradients
             # https://stackoverflow.com/questions/53331540/accumulating-gradients
             loss.backward(retain_graph=True)
+            writer.add_scalar('Loss/train_frame', loss, epoch*num_frames + frame)
 
             # TODO: are these correct/meaningful?
             total_loss += loss.item()

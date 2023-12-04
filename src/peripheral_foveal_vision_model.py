@@ -185,6 +185,7 @@ class PeripheralFovealVisionModel(nn.Module):
 if __name__ == "__main__":
     batch_size=5
     test_input = torch.randn(batch_size, 3, 224, 224)
+    logging.basicConfig(level=logging.INFO)
     logging.info(f"Test input shape: {test_input.shape}")
     model = PeripheralFovealVisionModel()
     logging.info("Model summary:")
@@ -193,5 +194,7 @@ if __name__ == "__main__":
     bbox, fixation = model(test_input)
     logging.info(f"Output from test input:")
     logging.info(f"    Current bbox shape {bbox.shape}")
+    logging.info(f"    bbox: {bbox}")
     logging.info(f"    Current fixation shape {fixation.shape}")
+    logging.info(f"    fixation: {fixation}")
 

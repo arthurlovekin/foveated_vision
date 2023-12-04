@@ -24,7 +24,8 @@ class FoveationLoss:
         xdist = xdist / self.img_size[0]
         ydist = ydist / self.img_size[1]
         dist_squared = xdist**2 + ydist**2
-        return dist_squared
+        # Sum over batch dimension
+        return torch.sum(dist_squared,dim=0)
 
 class IntersectionOverUnionLoss:
     def __init__(self): 
@@ -35,7 +36,7 @@ class IntersectionOverUnionLoss:
         bb1: [batch]x 4 tensor [xlow, xhigh, ylow,yhigh] 
         bb2: [batch]x 4 tensor [xlow, xhigh, ylow,yhigh] 
         """
-        return torchvision.ops.distance_box_iou_loss(box1, box2, reduction='none')
+        return torchvision.ops.distance_box_iou_loss(box1, box2, reduction='sum')
 
 class PeripheralFovealVisionModelLoss:
     def __init__(self):
