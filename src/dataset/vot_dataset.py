@@ -1,6 +1,6 @@
 from torch.utils.data import Dataset, DataLoader
 from torchvision.io import read_image
-from torchvision.transforms import Resize
+from torchvision.transforms.v2 import Resize
 import torch
 from os import path as Path 
 
@@ -16,7 +16,7 @@ class VotDataset(Dataset):
         self.basedir = directories[dataset_name]
         self.seq_len = clip_secs * 30
         self.in_mem=in_mem
-
+        self.target_size = targ_size
         if targ_size is None:
             self.resize = lambda x:x
         else: 
@@ -63,11 +63,11 @@ class VotDataset(Dataset):
         with open(Path.join(viddir,'groundtruth.txt'),'r') as file: 
             groundtruth = torch.tensor([[float(elt) for elt in line.split(',')] for line in file.readlines() if len(line) != 0])
         first = self.resize(read_image(Path.join(viddir,f'color/{1:08d}.jpg')))
-        groundtruth = groundtruth[start_idx:end_idx,:]
-        images = torch.zeros( [self.seq_len] + list(first.shape))
+        groundtruth = groundtruth[start_idx:end_idx,:] / torch.tensor([first.shape[-1],first.shape[-2],first.shape[-1],first.shape[-2]])
+        images = torch.zeros([self.seq_len] + list(first.shape))
         for i in range(self.seq_len): 
+            # Resize and remap colorspace to 0.0-1.0
             images[i] = self.resize(read_image(Path.join(viddir,f'color/{start_idx + i+1:08d}.jpg'))) / 255.0
-        
         return images,groundtruth
     
     def __getitem__(self,idx):
@@ -82,17 +82,19 @@ def get_dataloader(dataset_name='longterm',targ_size = None,batch_size=3,shuffle
     return DataLoader(ds,batch_size=batch_size,shuffle=shuffle,**loader_kwargs,collate_fn=collate_fn)
     
 if __name__ == "__main__": 
-    from tqdm import tqdm
+    # from tqdm import tqdm
     ds = VotDataset(in_mem=False)
-    print(ds)
+    # print(ds)
     print(len(ds))
     img, key = ds[4]
     print(img.shape)
     print(key.shape)
-    print(img, key)
+    # print(img, key)
+    print(f"Labels: {key}")
 
     dl = get_dataloader(targ_size=(650,650))
-    for i,loaded in tqdm(enumerate(dl),total=len(ds)): 
+
+    # for i,loaded in tqdm(enumerate(dl),total=len(ds)): 
         
-        if i %100: 
-            print(loaded)
+    #     if i %100: 
+    #         print(loaded)
