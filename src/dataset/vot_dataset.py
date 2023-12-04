@@ -16,7 +16,7 @@ class VotDataset(Dataset):
     def __init__(self, dataset_name='longterm',in_mem:bool=False,targ_size = (650,650),clip_secs:int = 5):
         # get list of video sequences:
         self.basedir = directories[dataset_name]
-        self.seq_len = clip_secs * 30
+        self.seq_len = int(clip_secs * 30)
         self.in_mem=in_mem
         self.target_size = targ_size
         if targ_size is None:
@@ -90,9 +90,9 @@ class VotDataset(Dataset):
         return self.get_vid(idx)
 
 
-def get_dataloader(dataset_name='longterm',targ_size = None,batch_size=3,shuffle=True,**loader_kwargs):
+def get_dataloader(dataset_name='longterm',targ_size = None,batch_size=3, clip_length_s=5, shuffle=True,**loader_kwargs):
     collate_fn = None
-    ds = VotDataset(dataset_name=dataset_name,targ_size=targ_size)
+    ds = VotDataset(dataset_name=dataset_name,targ_size=targ_size, clip_secs=clip_length_s)
     return DataLoader(ds,batch_size=batch_size,shuffle=shuffle,**loader_kwargs,collate_fn=collate_fn)
     
 if __name__ == "__main__": 

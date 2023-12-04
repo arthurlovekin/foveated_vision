@@ -22,13 +22,15 @@ batch_size_test = 10
 learning_rate = 0.01
 momentum = 0.5
 log_interval = 10
+clip_length_s_train = 0.5
+clip_length_s_test = 1
 
 random_seed = 1
 torch.backends.cudnn.enabled = False
 torch.manual_seed(random_seed)
 
-train_loader = get_dataloader(batch_size=batch_size_train, targ_size=(224, 224))
-test_loader = get_dataloader(batch_size=batch_size_test, targ_size=(224, 224))
+train_loader = get_dataloader(batch_size=batch_size_train, targ_size=(224, 224), clip_length_s=clip_length_s_train)
+test_loader = get_dataloader(batch_size=batch_size_test, targ_size=(224, 224), clip_length_s=clip_length_s_test)
 
 # Load the model
 model = PeripheralFovealVisionModel()
@@ -92,9 +94,10 @@ for epoch in tqdm(range(num_epochs)):
     step = 0
     for seq_inputs, seq_labels in epoch_progress_bar:
         # Zero out the optimizer
-        optimizer.zero_grad()
-        model.zero_grad()
-
+        optimizer.zero_grad(set_to_none=True)
+        model.zero_grad(set_to_none=True)
+        seq_inputs = seq_inputs.to(device)
+        seq_labels = seq_labels.to(device)
         # Each iteration is a batch of sequences of images
         frame = 0
         num_frames = seq_inputs.shape[1] 
@@ -107,31 +110,39 @@ for epoch in tqdm(range(num_epochs)):
             # Each iteration is a batch of sequences of images
             # Iterate through the sequence and train on each one
             if curr_inputs is None or curr_labels is None:
-                curr_inputs = inputs.to(device)
-                curr_labels = labels.to(device)
+                # Already on device as views of larger tensors
+                curr_inputs = inputs
+                curr_labels = labels
                 frame += 1
                 continue
             
             logging.debug(f"Current frame input shape: {curr_inputs.shape}")
             logging.debug(f"Current frame label shape: {curr_labels.shape}")
+            if torch.cuda.is_available():
+                # logging.info(torch.cuda.memory_summary(device=device, abbreviated=False))  # Very verbose
+                # Get free CUDA memory in GiB
+                used_memory = torch.cuda.memory_allocated() / 1024**3
+                logging.info(f"Current used CUDA memory: {used_memory}")
+                writer.add_scalar('Memory/CUDA_used_GiB', used_memory, step*num_frames + frame)
 
-            next_inputs = inputs.to(device)
-            next_labels = labels.to(device)
+            # Already on device as views of larger tensors
+            next_inputs = inputs
+            next_labels = labels
             # Forward pass
             # Run on the "current" frame to generate fixation for the "next" inputs (popped in the current iteration)
             curr_bbox, next_fixation = model(curr_inputs)
-            logging.info(f"Current bbox: {curr_bbox}")
-            logging.info(f"Next fixation: {next_fixation}")
-            loss = foveation_loss(curr_bbox, next_fixation, curr_labels, next_labels) # TODO: Also take in the fixation point
+            logging.debug(f"Current estimated bbox: {curr_bbox}")
+            logging.debug(f"Next fixation: {next_fixation}")
+            loss = foveation_loss(curr_bbox, next_fixation, curr_labels, next_labels)
             loss = loss/num_frames
 
             # Backward pass to accumulate gradients
             # https://stackoverflow.com/questions/53331540/accumulating-gradients
             loss.backward(retain_graph=True)
-            writer.add_scalar('Loss/train_frame', loss, epoch*num_frames + frame)
+            writer.add_scalar('Loss/train_frame', loss.detach(), step*num_frames + frame)  # Loss for each frame
 
             # TODO: are these correct/meaningful?
-            total_loss += loss.item()
+            total_loss += loss.detach().item()
             total_samples += curr_labels.shape[0]
 
             # Save current frame for next iteration
@@ -139,17 +150,21 @@ for epoch in tqdm(range(num_epochs)):
             curr_labels = next_labels
             frame += 1
 
+            # Free up memory. Must be done manually? https://discuss.pytorch.org/t/gpu-memory-consumption-increases-while-training/2770
+            del loss, curr_bbox, next_fixation
+        
         epoch_progress_bar.set_postfix(
             loss=f"{total_loss / total_samples:.4f}",
         )
-
         # Update the weights
         optimizer.step()
         step += 1
 
         # Log training info
-        writer.add_scalar('Loss/train', loss, epoch)
+        writer.add_scalar('Loss/train', total_loss / total_samples, epoch)  # Average loss
 
+        # Free up memory. Must be done manually? https://discuss.pytorch.org/t/gpu-memory-consumption-increases-while-training/2770
+        del seq_inputs, seq_labels, seq_iterator
         # TODO: Evaluate on test set
         # TODO: Save checkpoint
 

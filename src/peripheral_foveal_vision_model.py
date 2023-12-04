@@ -84,7 +84,7 @@ class CombinerModel(nn.Module):
     """
 
     def __init__(self, buffer_size=3, n_inputs: int=4098, n_heads: int=6,
-                 n_encoder_layers: int=4, dropout: float = 0.1):
+                 n_encoder_layers: int=3, dropout: float = 0.1):
         """
         Args:
             buffer_size (int): Number of previous frames to consider
@@ -150,6 +150,8 @@ class PeripheralFovealVisionModel(nn.Module):
         if self.current_fixation is None:
             self.batch_size = current_image.shape[0]
             self.current_fixation = torch.ones((self.batch_size, self.fixation_length), dtype=torch.float32)*0.5
+            if next(self.parameters()).is_cuda: # returns a boolean
+                self.current_fixation = self.current_fixation.cuda()
 
         # Extract features from the peripheral image
         background_img = self.downsampler(current_image)
@@ -172,15 +174,17 @@ class PeripheralFovealVisionModel(nn.Module):
         # Initialize the buffer if necessary 
         if self.buffer is None:
             self.buffer = (torch.rand_like(all_features.unsqueeze(1).expand(-1,self.buffer_len,-1), dtype=torch.float32)-0.5)*0.1
+            if next(self.parameters()).is_cuda: # returns a boolean
+                self.buffer = self.buffer.cuda()
         
         temp_buffer = torch.cat([all_features.unsqueeze(1), self.buffer], dim=1)
         logging.debug(f"Temp buffer shape: {temp_buffer.shape}")
         self.buffer = temp_buffer[:, :self.buffer_len, :]
         logging.debug(f"Buffer shape: {self.buffer.shape}")
 
-        bbox, self.current_fixation = self.combiner_model(self.buffer)
-        return bbox, self.current_fixation
-
+        bbox, next_fixation = self.combiner_model(self.buffer)
+        self.current_fixation = next_fixation.detach()
+        return bbox, next_fixation 
 
 if __name__ == "__main__":
     batch_size=5
