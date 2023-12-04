@@ -64,6 +64,18 @@ class VotDataset(Dataset):
             groundtruth = torch.tensor([[float(elt) for elt in line.split(',')] for line in file.readlines() if len(line) != 0])
         first = self.resize(read_image(Path.join(viddir,f'color/{1:08d}.jpg')))
         groundtruth = groundtruth[start_idx:end_idx,:] / torch.tensor([first.shape[-1],first.shape[-2],first.shape[-1],first.shape[-2]])
+        # Groundtruth may have lines with [Nan, Nan, Nan, Nan], but we need labels at every timestep
+        # TODO: interpolate the groundtruth labels
+        # For now, just replicate the last non-Nan label
+        # Last non-Nan label
+        last_non_nan = torch.tensor([0,0,0,0])
+        for i in range(groundtruth.shape[0]):
+            if torch.any(torch.isnan(groundtruth[i])):
+                # Replace the NaNs with the last non-NaN value
+                groundtruth[i] = last_non_nan
+            else:
+                last_non_nan = groundtruth[i]
+
         images = torch.zeros([self.seq_len] + list(first.shape))
         for i in range(self.seq_len): 
             # Resize and remap colorspace to 0.0-1.0
