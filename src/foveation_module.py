@@ -70,4 +70,26 @@ class FoveationModule(nn.Module):
         return resized
         
 
+class NeuralFoveationModule(nn.Module):
+    """
+    Takes the output attentions of the transformer and uses them to generate a sample foveation patch
+    """
 
+    def __init__(self):
+        super().__init__()
+        self.foveation_module = FoveationModule(crop_width=0.25, crop_height=0.25, out_width_px=224, out_height_px=224, n_fixations=1)
+        # TODO: Make the parameters of this model dynamic and also make the architecture better if necessary
+        self.fixation_model = nn.Sequential(
+            nn.Linear(2048, 128),
+            nn.ReLU(),
+            nn.Linear(128, 2),
+            nn.Sigmoid()
+        )
+        
+    def forward(self, transformer_attentions, image):
+        """
+        Compute the parametrization of the foveal patch from the transformer attentions,
+        then apply it to the image
+        """
+        fixation = self.fixation_model(transformer_attentions)
+        return self.foveation_module(fixation, image)
