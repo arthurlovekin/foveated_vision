@@ -120,6 +120,23 @@ class CombinerModel(nn.Module):
         pos = self.pos_head(bbox)
         return bbox, pos 
 
+class CombinerModelTimeSeriesTransformer(nn.Module):
+    """Uses a pre-trained time-series transformer (Autoformer) to combine the features from
+    the peripheral and foveal models.
+    """
+    def __init__(self):
+        super().__init__()
+        self.transformer = None
+        self.object_tracking_head = nn.Sequential(
+            nn.Linear(2048, 4),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, all_features_buffer):
+        """ Outputs both the predicted bounding box, 
+        and the output attentions of the transformer, which are used by the NeuralFoavationModule to generate a foveal patch.
+        """
+        pass
 
 class PeripheralFovealVisionModel(nn.Module):
     def __init__(self):#, batch_size=1):

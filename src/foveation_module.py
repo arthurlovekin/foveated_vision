@@ -79,11 +79,12 @@ class NeuralFoveationModule(nn.Module):
         super().__init__()
         self.foveation_module = FoveationModule(crop_width=0.25, crop_height=0.25, out_width_px=224, out_height_px=224, n_fixations=1)
         # TODO: Make the parameters of this model dynamic and also make the architecture better if necessary
+        self.transformer_attentions_len = 2048
         self.fixation_model = nn.Sequential(
-            nn.Linear(2048, 128),
+            nn.Linear(self.transformer_attentions_len, 128),
             nn.ReLU(),
             nn.Linear(128, 2),
-            nn.Sigmoid()
+            nn.Sigmoid() # get into the range [0,1]
         )
         
     def forward(self, transformer_attentions, image):
