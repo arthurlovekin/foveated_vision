@@ -156,25 +156,6 @@ class PeripheralFovealVisionModel(nn.Module):
         self.buffer_len = 3
         self.buffer = None #torch.zeros(self.batch_size, self.buffer_len, self.feature_len, dtype=torch.float32)
         
-    #     self.foveal_feature_buffer = None
-    #     self.peripheral_feature_buffer = None
-    #     self.fovea_point_buffer = None
-    #     # Initialize the buffers
-    #     self.reset_buffers()
-
-
-    # def reset_buffers(self, batched_image):
-    #     # Initialize the buffers with zeros
-    #     self.foveal_feature_buffer = torch.zeros(
-    #         (self.batch_size, self.buffer_len, self.feature_len), dtype=torch.float32
-    #     )
-    #     self.fovea_point_buffer = torch.zeros(
-    #         (self.batch_size, self.buffer_len, 2), dtype=torch.float32
-    #     )
-    #     self.peripheral_feature_buffer = torch.zeros(
-    #         (self.batch_size, self.buffer_len, self.feature_len), dtype=torch.float32
-    #     )
-
     def forward(self, current_image):
         """
         Args:
@@ -214,52 +195,14 @@ class PeripheralFovealVisionModel(nn.Module):
         print(f"Buffer shape: {self.buffer.shape}")
 
         bbox, self.current_fixation = self.combiner_model(self.buffer)
-
-        # Deprecated?: track separate buffers, would be nice to have for debugging
-        # # Add the peripheral feature to the buffer
-        # self.peripheral_feature_buffer = self.add_vector_to_buffer(
-        #     peripheral_feature, self.peripheral_feature_buffer
-        # )
-        # # Add the foveal feature to the buffer
-        # self.foveal_feature_buffer = self.add_vector_to_buffer(
-        #     foveal_feature, self.foveal_feature_buffer
-        # )
-
-        # # Add the fovea point to the buffer
-        # self.fovea_point_buffer = self.add_vector_to_buffer(
-        #     self.current_fixation, self.fovea_point_buffer
-        # )
         return bbox, self.current_fixation
-    
-    # def add_to_buffer(self, all_features):
-    #     """
-    #     Adds a vector to the buffer, popping the oldest vector in the buffer.
-    #     Assumes the buffer is of shape (batch, buffer_len, all_feature_len).
-    #     ()
-    #     """
-
-    #     self.buffer = torch.cat([all_features.unsqueeze(1), self.buffer], dim=1)
-    #     return self.buffer[-self.buffer_len :]
-    
-    # def add_vector_to_buffer(self, vector, buffer):
-    #     """
-    #     Adds a vector to the buffer, popping the oldest vector in the buffer.
-    #     Assumes the buffer is of shape (batch, buffer_len, feature_len).
-    #     """
-    #     print(f"Adding vector of shape {vector.shape} to buffer of shape {buffer.shape}")
-    #     print(f"Unsqueezed vector shape: {vector.unsqueeze(1).shape}")
-    #     buffer = torch.cat([vector.unsqueeze(1), buffer], dim=1)
-    #     return buffer[-self.buffer_len :]
 
 
 if __name__ == "__main__":
-    # model = PeripheralModel()
-    # print("Peripheral model summary:")
-    # print(summary(model))
     batch_size=5
     test_input = torch.randn(batch_size, 3, 224, 224)
     print(f"Test input shape: {test_input.shape}")
-    model = PeripheralFovealVisionModel()#batch_size=batch_size)
+    model = PeripheralFovealVisionModel()
     print("Model summary:")
     print(summary(model))
 
