@@ -11,13 +11,13 @@ from tqdm import tqdm
 import logging
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)  # Change this to INFO or WARNING to reduce verbosity
+logging.basicConfig(level=logging.INFO)  # Change this to INFO or WARNING to reduce verbosity
 
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 num_epochs = 3
-batch_size_train = 4
+batch_size_train = 1
 batch_size_test = 10
 learning_rate = 0.01
 momentum = 0.5
@@ -88,7 +88,8 @@ class SequenceIterator:
 total_loss = 0.0
 total_samples = 0
 for epoch in tqdm(range(num_epochs)):
-    epoch_progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}", leave=False)
+    epoch_progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}", position=0, leave=True)
+    step = 0
     for seq_inputs, seq_labels in epoch_progress_bar:
         # Zero out the optimizer
         optimizer.zero_grad()
@@ -96,18 +97,19 @@ for epoch in tqdm(range(num_epochs)):
 
         # Each iteration is a batch of sequences of images
         frame = 0
-        num_frames = len(seq_inputs)
+        num_frames = seq_inputs.shape[1] 
         curr_inputs = None  # Train on these so we have access to the "next" fixation
         curr_labels = None
         # Iterate through the sequence and train on each one
         seq_iterator = SequenceIterator(seq_inputs, seq_labels)
-        frame_progress_bar = tqdm(seq_iterator, desc=f"Step {frame+1}/{num_frames}", leave=False)
+        frame_progress_bar = tqdm(seq_iterator, total=num_frames, desc=f"Step {step+1} progress", position=1, leave=False)
         for inputs, labels in frame_progress_bar: 
             # Each iteration is a batch of sequences of images
             # Iterate through the sequence and train on each one
             if curr_inputs is None or curr_labels is None:
                 curr_inputs = inputs.to(device)
                 curr_labels = labels.to(device)
+                frame += 1
                 continue
             
             logging.debug(f"Current frame input shape: {curr_inputs.shape}")
@@ -123,7 +125,7 @@ for epoch in tqdm(range(num_epochs)):
 
             # Backward pass to accumulate gradients
             # https://stackoverflow.com/questions/53331540/accumulating-gradients
-            loss.backward()
+            loss.backward(retain_graph=True)
 
             # TODO: are these correct/meaningful?
             total_loss += loss.item()
@@ -140,6 +142,7 @@ for epoch in tqdm(range(num_epochs)):
 
         # Update the weights
         optimizer.step()
+        step += 1
 
         # Log training info
         writer.add_scalar('Loss/train', loss, epoch)

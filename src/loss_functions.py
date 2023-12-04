@@ -1,6 +1,7 @@
 import torch
 import torchvision
 from torch import nn
+import logging
 
 # TODO: Could make all loss functions nn.Modules if they contain learnable parameters
 # (just swap out the __call__ for a forward method, and add (nn.Module) after the class name)
@@ -16,10 +17,10 @@ class FoveationLoss:
         """
         xinside = torch.logical_and(bb[...,0:1] < fixation[...,0:1],  fixation[...,0:1] < bb[...,1:2])
         xdist = torch.where(xinside,0,torch.min(torch.abs(fixation[...,0:1] - bb[...,0:1]),torch.abs(fixation[...,0:1] - bb[...,1:2]),))
-        print(xdist)
+        logging.debug(f"x dist: {xdist}")
         yinside = torch.logical_and(bb[...,2:3] < fixation[...,1:2], fixation[...,1:2] < bb[...,3:4])
         ydist = torch.where(yinside,0,torch.min(torch.abs(fixation[...,1:2] - bb[...,2:3]),torch.abs(fixation[...,1:2] - bb[...,3:4]),))
-        print(ydist)
+        logging.debug(f"y dist: {ydist}")
         xdist = xdist / self.img_size[0]
         ydist = ydist / self.img_size[1]
         dist_squared = xdist**2 + ydist**2
