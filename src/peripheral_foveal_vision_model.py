@@ -5,6 +5,7 @@ from foveation_module import FoveationModule
 from torchvision.transforms import Resize
 from torchinfo import summary
 import math
+import logging
 # from typing import Tensor
 
 RESNET_DEFAULT_INPUT_SIZE = (224, 224)
@@ -22,7 +23,7 @@ class PeripheralModel(nn.Module):
         if hasattr(self.pretrained, "fc"):
             self.pretrained.fc = torch.nn.Identity()
         else:
-            print("No fc layer found in pretrained model")
+            logging.error("No fc layer found in pretrained model")
         # self.pretrained.fc = nn.Linear(2048, 4)
         # self.pretrined_new = torch.nn.Sequential(*list(self.pretrained.children())[:-1])
         # for param in self.pretrained[-1].parameters():
@@ -46,7 +47,7 @@ class FovealModel(nn.Module):
         if hasattr(self.pretrained, "fc"):
             self.pretrained.fc = torch.nn.Identity()
         else:
-            print("No fc layer found in pretrained model")
+            logging.error("No fc layer found in pretrained model")
 
     def forward(self, foveal_patch):
         # output: (batch, 2048) feature vector
@@ -110,7 +111,7 @@ class CombinerModel(nn.Module):
         # Transformer expects input of shape (batch, seq_len, feature_len)
         # Concatenate all features along the time dimension
         positional_features = self.positional_encoding(all_features_buffer)
-        print(f"Transformer input shape: {positional_features.shape}")
+        logging.debug(f"Transformer input shape: {positional_features.shape}")
         latent_seq = self.transformer_model(positional_features)
         # Hack decoder
         # Flatten the sequence
@@ -153,29 +154,29 @@ class PeripheralFovealVisionModel(nn.Module):
         # Extract features from the peripheral image
         background_img = self.downsampler(current_image)
         peripheral_feature = self.peripheral_model(background_img)
-        print(f"Peripheral feature shape: {peripheral_feature.shape}")
+        logging.debug(f"Peripheral feature shape: {peripheral_feature.shape}")
 
         # Extract features from the foveal patch
         foveal_patch = self.foveation_module(
             self.current_fixation, current_image
         )
-        print(f"Foveal patch shape: {foveal_patch.shape}")
+        logging.debug(f"Foveal patch shape: {foveal_patch.shape}")
         foveal_feature = self.foveal_model(foveal_patch)
-        print(f"Foveal feature shape: {foveal_feature.shape}")
-        print(f"Current fixation shape: {self.current_fixation.shape}")
+        logging.debug(f"Foveal feature shape: {foveal_feature.shape}")
+        logging.debug(f"Current fixation shape: {self.current_fixation.shape}")
 
         # Add the current fixation to the buffer
         all_features = torch.cat([peripheral_feature, foveal_feature, self.current_fixation], dim=1)
-        print(f"All features shape: {all_features.shape}")
+        logging.debug(f"All features shape: {all_features.shape}")
 
         # Initialize the buffer if necessary 
         if self.buffer is None:
             self.buffer = (torch.rand_like(all_features.unsqueeze(1).expand(-1,self.buffer_len,-1), dtype=torch.float32)-0.5)*0.1
         
         temp_buffer = torch.cat([all_features.unsqueeze(1), self.buffer], dim=1)
-        print(f"Temp buffer shape: {temp_buffer.shape}")
+        logging.debug(f"Temp buffer shape: {temp_buffer.shape}")
         self.buffer = temp_buffer[:, :self.buffer_len, :]
-        print(f"Buffer shape: {self.buffer.shape}")
+        logging.debug(f"Buffer shape: {self.buffer.shape}")
 
         bbox, self.current_fixation = self.combiner_model(self.buffer)
         return bbox, self.current_fixation
@@ -184,13 +185,13 @@ class PeripheralFovealVisionModel(nn.Module):
 if __name__ == "__main__":
     batch_size=5
     test_input = torch.randn(batch_size, 3, 224, 224)
-    print(f"Test input shape: {test_input.shape}")
+    logging.info(f"Test input shape: {test_input.shape}")
     model = PeripheralFovealVisionModel()
-    print("Model summary:")
-    print(summary(model))
+    logging.info("Model summary:")
+    logging.info(summary(model))
 
     bbox, fixation = model(test_input)
-    print(f"Output from test input:")
-    print(f"    Current bbox shape {bbox.shape}")
-    print(f"    Current fixation shape {fixation.shape}")
+    logging.info(f"Output from test input:")
+    logging.info(f"    Current bbox shape {bbox.shape}")
+    logging.info(f"    Current fixation shape {fixation.shape}")
 

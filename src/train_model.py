@@ -8,6 +8,8 @@ from dataset.got10k_dataset import *
 from peripheral_foveal_vision_model import PeripheralFovealVisionModel
 from loss_functions import PeripheralFovealVisionModelLoss, IntersectionOverUnionLoss
 from tqdm import tqdm
+import logging
+logging.basicConfig(level=logging.DEBUG)
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -45,7 +47,6 @@ writer = SummaryWriter()
 images, labels = next(iter(train_loader))
 # images = images[0, :, :, :, :]  # Remove the batch dimension so we can display an entire sequence
 images = images[:, 0, :, :, :]  # Remove the sequence dimension so we can display the first frame for an entire batch
-print(images.shape)
 grid = torchvision.utils.make_grid(images)
 writer.add_image('images', grid, 0)
 # writer.add_graph(model, images) # TODO: Fix "RuntimeError: Cannot insert a Tensor that requires grad as a constant. Consider making it a parameter or input, or detaching the gradient"
@@ -81,10 +82,9 @@ class SequenceIterator:
         self.frame += 1
         return inputs, labels
 
+total_loss = 0.0
+total_samples = 0
 for epoch in tqdm(range(num_epochs)):
-    total_loss = 0.0
-    total_samples = 0
-
     epoch_progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}", leave=False)
     for seq_inputs, seq_labels in epoch_progress_bar:
         # Zero out the optimizer
@@ -107,15 +107,11 @@ for epoch in tqdm(range(num_epochs)):
                 curr_labels = labels.to(device)
                 continue
             
-            # print(f"Current frame input shape: {curr_inputs.shape}")
+            logging.debug(f"Current frame input shape: {curr_inputs.shape}")
+            logging.debug(f"Current frame label shape: {curr_labels.shape}")
 
             next_inputs = inputs.to(device)
             next_labels = labels.to(device)
-
-            # print(f"Input shape: {curr_inputs.shape}")
-            # print(f"Label shape: {curr_labels.shape}")
-
-
             # Forward pass
             # Run on the "current" frame to generate fixation for the "next" inputs (popped in the current iteration)
             curr_bbox, next_fixation = model(curr_inputs)
@@ -149,8 +145,5 @@ for epoch in tqdm(range(num_epochs)):
         # TODO: Save checkpoint
 
     epoch_progress_bar.close()
-    print(f"Finished epoch {epoch+1}/{num_epochs}, loss: {total_loss / total_samples:.4f}")
-    # print(f'Epoch {epoch+1}/{num_epochs}, Loss: {loss.item():.4f}')
-
-print(f"Finished training, Loss: {total_loss / total_samples:.4f}")
-# print(f'Finished Training, Loss: {loss.item():.4f}')
+    print(f"\nFinished epoch {epoch+1}/{num_epochs}, loss: {total_loss / total_samples:.4f}")
+print(f"\nFinished training, Loss: {total_loss / total_samples:.4f}")
