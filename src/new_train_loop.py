@@ -57,10 +57,11 @@ print(f"Starting training with {num_epochs} epochs, batch size of {batch_size_tr
 model.zero_grad()
 
 for epoch in range(num_epochs):
+    running_loss = 0.0 # for printing 
+
     # Loop through all (batches of) video sequences
-    for seq_inputs, seq_labels in train_loader:
+    for j, (seq_inputs, seq_labels) in enumerate(train_loader):
         seq_loss = 0.0
-        seq_samples_processed = 0
 
         # Zero out the optimizer
         optimizer.zero_grad(set_to_none=True)
@@ -69,70 +70,39 @@ for epoch in range(num_epochs):
         # Move to GPU
         seq_inputs = seq_inputs.to(device)
         seq_labels = seq_labels.to(device)
-
-        curr_frame = None  # Train on these so we have access to the "next" fixation
-        curr_label = None
+        # logging.info(f"Current sequence shape: {seq_inputs.shape}")   # B,Frames,C,W,H
+        # logging.info(f"Current label list shape: {seq_labels.shape}") # B,Frames,4
 
         # Iterate through the sequence of frames and accumulate the loss 
-        n_frames = seq_inputs.shape[1]
-        for i in range(n_frames-1): # -1 because the loss depends on the next frame as well
-            curr_frame = seq_inputs[:,i,:,:,:] # B,F,C,W,H
-            curr_label = seq_inputs[:,i,:] # B,F,4
-            next_label = seq_inputs[:,i+1,:]
+        num_frames = seq_inputs.shape[1]
+        for i in range(num_frames-1): # -1 because the loss depends on the next frame as well
+            curr_frame = seq_inputs[:,i,:,:,:]  # Batch, Frames, C,W,H
+            curr_label = seq_labels[:,i,:]      
+            next_label = seq_labels[:,i+1,:]
         
-            #logging
-            logging.debug(f"Current frame input shape: {curr_inputs.shape}")
-            logging.debug(f"Current frame label shape: {curr_labels.shape}")
+            #logging Memory
             if torch.cuda.is_available():
                 used_memory = torch.cuda.memory_allocated() / 1024**3
                 logging.info(f"Current used CUDA memory: {used_memory} GB")
-                writer.add_scalar('Memory/CUDA_used_GiB', used_memory, step*num_frames + frame)
 
             # Run on the "current" frame to generate fixation for the "next" inputs (popped in the current iteration)
-            curr_bbox, next_fixation = model(curr_inputs)
-            logging.debug(f"Current estimated bbox: {curr_bbox}")
-            logging.debug(f"Next fixation: {next_fixation}")
-            loss = foveation_loss(curr_bbox, next_fixation, curr_labels, next_labels)
-            loss = loss/num_frames
+            curr_bbox, next_fixation = model(curr_frame)
 
-            # Backward pass to accumulate gradients
-            # https://stackoverflow.com/questions/53331540/accumulating-gradients
-            
-            # if seq_iterator.frame == len(seq_iterator)-1:
-            #     loss.backward()
-            # else:
-            #     loss.backward(retain_graph=True)
-            # writer.add_scalar('Loss/train_frame', loss.detach(), step*num_frames + frame)  # Loss for each frame
+            # Add to the loss (We'll backprop once the whole video is done)
+            seq_loss += foveation_loss(curr_bbox, next_fixation, curr_label, next_label)
 
-            # TODO: are these correct/meaningful?
-            total_loss += loss
-            total_samples += curr_labels.shape[0]
-
-            # Save current frame for next iteration
-            curr_inputs = next_inputs
-            curr_labels = next_labels
-            frame += 1
-
-            # Free up memory. Must be done manually? https://discuss.pytorch.org/t/gpu-memory-consumption-increases-while-training/2770
-            # del loss, curr_bbox, next_fixation
-        
-        epoch_progress_bar.set_postfix(
-            loss=f"{total_loss.item() / total_samples:.4f}",
-        )
         # Update the weights
-        total_loss.backward()
+        seq_loss.backward()
         optimizer.step()
-        logging.info('stepped')
-        step += 1
 
         # Log training info
-        writer.add_scalar('Loss/train', total_loss / total_samples, epoch)  # Average loss
-
-        # Free up memory. Must be done manually? https://discuss.pytorch.org/t/gpu-memory-consumption-increases-while-training/2770
-        # del seq_inputs, seq_labels, seq_iterator
-        # TODO: Evaluate on test set
-        # TODO: Save checkpoint
-
-    epoch_progress_bar.close()
+        running_loss += seq_loss.item()
+        batches_between_prints = 1
+        if j % batches_between_prints == 0:
+            last_loss = running_loss/batches_between_prints
+            logging.info(f"Batch {j+1} loss: {last_loss}")
+            # writer.add_scalar('Loss/train', total_loss / total_samples, epoch)  # Average loss
+            running_loss = 0.0
+        
     print(f"\nFinished epoch {epoch+1}/{num_epochs}, loss: {total_loss / total_samples:.4f}")
 print(f"\nFinished training, Loss: {total_loss / total_samples:.4f}")
