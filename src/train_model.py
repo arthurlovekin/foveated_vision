@@ -36,8 +36,8 @@ save_model = True
 model_dir = "models"
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
-save_frequency = 100  # Save model every N steps
-test_frequency = 10  # Evaluate on test set every N steps
+test_frequency = 10  # Evaluate on test set every N steps.
+save_frequency = test_frequency*20  # Save model every N steps. Must be a multiple of test_frequency as we only save if the test loss is better.
 use_epoch_progress_bar = False  # Use epoch progress bar in addition to step progress bar
 
 random_seed = 1
@@ -170,7 +170,7 @@ def test(model, test_loader, loss_fn, step=0):
     writer.flush()  # Unnecessary?
     return avg_vloss
 
-
+best_test_loss = float('inf')
 for epoch in range(num_epochs):
     logging.info(f"Starting epoch {epoch+1}/{num_epochs}")
     epoch_progress_bar = None
@@ -252,14 +252,16 @@ for epoch in range(num_epochs):
 
         # Evaluate on test set
         if step % test_frequency == 0:
-            test_loss = test(model, test_loader, foveation_loss, step)
+            test_loss = test(model, test_loader, foveation_loss, step).item()
+            if test_loss < best_test_loss:
+                logging.info(f"New best test loss: {test_loss:.4f}")
+                best_test_loss = test_loss
+                # Save model checkpoint
+                if save_model and step % save_frequency == 0 and step != 0:
+                    date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    model_path = os.path.join(model_dir, f"{date_str}_model_epoch_{epoch+1}_step_{step}.pth")
+                    torch.save(model.state_dict(), model_path)
             model.train()  # Set back to train mode
-
-        # Save model checkpoint
-        if save_model and step % save_frequency == 0 and step != 0:
-            date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-            model_path = os.path.join(model_dir, f"{date_str}_model_epoch_{epoch+1}_step_{step}.pth")
-            torch.save(model.state_dict(), model_path)
         step += 1
 
     if use_epoch_progress_bar:
