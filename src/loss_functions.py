@@ -43,7 +43,9 @@ class PeripheralFovealVisionModelLoss:
         self.iou_loss = IntersectionOverUnionLoss()
         # TODO: Make this independent of the image size?
         self.foveation_loss = FoveationLoss((224,224))
-    
+        self.iou_weight = 1.0
+        self.foveation_weight = 1.0
+
     def __call__(self, curr_bbox, next_fixation, true_curr_bbox, true_next_bbox):
         """
         Current version: consists of 2 parts
@@ -52,8 +54,7 @@ class PeripheralFovealVisionModelLoss:
         """
         loss_iou = self.iou_loss(curr_bbox, true_curr_bbox)
         loss_foveation = self.foveation_loss(next_fixation, true_next_bbox)
-        # TODO: Make this a weighted combination
-        return loss_iou + loss_foveation
+        return self.iou_weight*loss_iou + self.foveation_weight*loss_foveation
 
 
 if __name__ == "__main__": 
