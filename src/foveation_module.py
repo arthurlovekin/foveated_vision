@@ -25,7 +25,7 @@ class FoveationModule(nn.Module):
         self.crop_width = crop_width
         self.crop_height = crop_height
         self.n_fixations = n_fixations
-        self.bound= bound_crops
+        self.bound_crops= bound_crops
         self.resize = Resize((out_width_px, out_height_px), antialias=True)
 
     def forward(self,fixation,image, shape=None): 
@@ -55,7 +55,7 @@ class FoveationModule(nn.Module):
         # Make sure widths and heights are on the right device
         widths = widths.to(image.device)
         heights = heights.to(image.device)
-        if self.bound: 
+        if self.bound_crops: 
             # make sure we don't crop past border 
             left_vec_term = torch.max(torch.zeros_like(fixation[...,0]),fixation[...,0]*image_xshape - widths // 2)
             left_vec = torch.min(left_vec_term, image_xshape - widths)

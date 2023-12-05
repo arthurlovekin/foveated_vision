@@ -84,7 +84,7 @@ class CombinerModel(nn.Module):
     """
 
     def __init__(self, buffer_size=3, n_inputs: int=4098, n_heads: int=6,
-                 n_encoder_layers: int=3, dropout: float = 0.1):
+                 n_encoder_layers: int=3, dropout: float = 0.1, fixation_length=2):
         """
         Args:
             buffer_size (int): Number of previous frames to consider
@@ -105,7 +105,7 @@ class CombinerModel(nn.Module):
             nn.Sigmoid(), # make outputs 0-1
         )
         self.pos_head = nn.Sequential(
-            nn.Linear(self.sequence_dim, 2),
+            nn.Linear(self.sequence_dim, fixation_length),
             nn.Sigmoid(), # make outputs 0-1
         )
 
@@ -149,15 +149,16 @@ class PeripheralFovealVisionModel(nn.Module):
             (self.peripheral_resolution[0], self.peripheral_resolution[1]),
             antialias=True,
         )
+        # self.feature_len = 2x2048 (resnet output) + 2 for center of fixation 
+        # TODO: Just output 4 points (centerx/y, dimensionsx/y) directly for the next fixation instead of 2
+        self.fixation_length = 2
+        self.buffer_len = 3
         self.foveation_module = FoveationModule(bound_crops=False)
         self.peripheral_model = PeripheralModel()
         self.foveal_model = FovealModel()
-        self.combiner_model = CombinerModel()
+        self.combiner_model = CombinerModel(fixation_length=self.fixation_length)
         self.position_encoding = None
-        self.fixation_length = 2
         self.current_fixation = None 
-        # self.feature_len = 2x2048 (resnet output) + 2 for center of fixation 
-        self.buffer_len = 3
         self.buffer = None 
     
     def reset(self):
