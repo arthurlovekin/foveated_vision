@@ -85,8 +85,13 @@ class PeripheralFovealVisionModelLoss:
         """
         next_fixation = self.fix_fovea_if_needed(next_fixation)
         loss_iou = self.iou_loss(curr_bbox, true_curr_bbox)
-        fovea_corner_parametrization = center_width_to_corners(next_fixation)
+
+        # TODO: Just output 4 points directly from the model
+        fixation_widths_heights = torch.ones_like(curr_bbox[...,2:4])*0.25
+        fixation_bbox = torch.cat([next_fixation, fixation_widths_heights], dim=-1)
+        fovea_corner_parametrization = center_width_to_corners(fixation_bbox)
         loss_foveation = self.iou_loss(fovea_corner_parametrization, true_next_bbox)
+        
         # loss_foveation = self.foveation_loss(next_fixation, true_next_bbox)
         return loss_iou + loss_foveation
         # Experimental: penalize scale of bounding box so it doesn't get too big.

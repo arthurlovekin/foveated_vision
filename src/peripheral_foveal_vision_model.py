@@ -95,17 +95,19 @@ class CombinerModel(nn.Module):
         """
         super().__init__()
         self.positional_encoding = PositionalEncoding(n_inputs,dropout)
-        # self.transformer_model = nn.Transformer(
-        #     nhead=n_heads, num_encoder_layers=n_encoder_layers, num_decoder_layers=0
-        # )
         self.transformer_encoder_layer = nn.TransformerEncoderLayer(d_model=n_inputs, nhead=n_heads, dim_feedforward=2048, dropout=dropout, batch_first=True)
         self.transformer_model = nn.TransformerEncoder(encoder_layer=self.transformer_encoder_layer, num_layers=n_encoder_layers) # (contains multiple TransformerEncoderLayers)
         # Map the encoded sequence to a bounding box.
-        # This really shouldn't be done like this; we should use a decoder,
-        # and the output should be a sequence of bounding boxes (with a loss on each one).
+        # TODO: This could use a more advanced decoder
         self.sequence_dim = buffer_size*n_inputs
-        self.bbox_head = nn.Linear(self.sequence_dim, 4)  
-        self.pos_head = nn.Linear(4, 2)  
+        self.bbox_head = nn.Sequential(
+            nn.Linear(self.sequence_dim, 4),
+            nn.Sigmoid(), # make outputs 0-1
+        )
+        self.pos_head = nn.Sequential(
+            nn.Linear(self.sequence_dim, 2),
+            nn.Sigmoid(), # make outputs 0-1
+        )
 
     def forward(self, all_features_buffer):
         # Transformer expects input of shape (batch, seq_len, feature_len)
@@ -117,7 +119,7 @@ class CombinerModel(nn.Module):
         # Flatten the sequence
         latent_seq = latent_seq.reshape((latent_seq.shape[0], -1))
         bbox = self.bbox_head(latent_seq)
-        pos = self.pos_head(bbox)
+        pos = self.pos_head(latent_seq)
         return bbox, pos 
 
 class CombinerModelTimeSeriesTransformer(nn.Module):
