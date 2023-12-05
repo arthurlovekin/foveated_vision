@@ -20,15 +20,8 @@ def center_width_to_corners(boxes):
     xhigh = xcenter + width/2
     ylow = ycenter - height/2
     yhigh = ycenter + height/2
-    output = torch.cat([xlow,xhigh,ylow,yhigh],dim=-1)
-    # logging.info(f"Boxes shape: {boxes.shape}")
-    # logging.info(f"first boxes: {boxes[0]}")
-    # logging.info(f"Center Parametrization xcenter shape: {xcenter.shape}")
-    # logging.info(f"Center Parametrization width shape: {width.shape}")
-    # logging.info(f"Corner Parametrization xlow shape: {xlow.shape}")
-    # logging.info(f"Corner Parametrization output shape: {output.shape}")
-    
-    return output
+
+    return torch.cat([xlow,xhigh,ylow,yhigh],dim=-1)
 
 class FoveationLoss:
     def __init__(self,img_size):
@@ -65,13 +58,24 @@ class IntersectionOverUnionLoss:
         return torchvision.ops.distance_box_iou_loss(box1, box2, reduction='sum')
 
 class PeripheralFovealVisionModelLoss:
-    def __init__(self):
+    def __init__(self,default_fovea_shape=(None,None)):
         self.iou_loss = IntersectionOverUnionLoss()
         # TODO: Make this independent of the image size?
         self.foveation_loss = FoveationLoss((224,224))
         self.iou_weight = 1.0
         self.foveation_weight = 1.0
         self.scale_weight = 0.0  # Disabled by default
+        self.default_width, self.default_height = default_fovea_shape
+
+    def fix_fovea_if_needed(self,fixations):
+        if fixations.shape[-1] == 2: 
+            return torch.cat([
+                    fixations,
+                    torch.full_like(fixations[...,0:1],self.default_width),
+                    torch.full_like(fixations[...,0:1],self.default_width),
+                ],axis=-1)
+        else: 
+            return fixations
 
     def __call__(self, curr_bbox, next_fixation, true_curr_bbox, true_next_bbox):
         """
@@ -79,6 +83,7 @@ class PeripheralFovealVisionModelLoss:
         1. Intersection over union loss between the current bounding box and the ground-truth current bounding box
         2. Foveation loss between the next fixation and the ground-truth bounding box (from the next timestep)
         """
+        next_fixation = self.fix_fovea_if_needed(next_fixation)
         loss_iou = self.iou_loss(curr_bbox, true_curr_bbox)
 
         if next_fixation.shape[-1] != 4:

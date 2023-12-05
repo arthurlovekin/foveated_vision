@@ -168,6 +168,9 @@ class PeripheralFovealVisionModel(nn.Module):
         self.current_fixation = None 
         self.buffer = None
 
+    def get_default_fovea_size(self):
+        return self.foveation_module.crop_width,self.foveation_module.crop_height
+
     def forward(self, current_image):
         """
         Args:
