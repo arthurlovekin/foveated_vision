@@ -157,6 +157,13 @@ class PeripheralFovealVisionModel(nn.Module):
         # self.feature_len = 2x2048 (resnet output) + 2 for center of fixation 
         self.buffer_len = 3
         self.buffer = None 
+    
+    def reset(self):
+        # Need to detach then reattach the hidden variables of the model to prevent 
+        # the gradient from propagating back in time
+        # (Setting to none causes them to be reinitialized)
+        self.current_fixation = None 
+        self.buffer = None
 
     def forward(self, current_image):
         """

@@ -3,6 +3,7 @@
 from datetime import datetime
 import torch
 import torchvision
+torchvision.disable_beta_transforms_warning()
 from torch.utils.tensorboard import SummaryWriter
 from dataset.vot_dataset import *
 from dataset.got10k_dataset import *
@@ -28,7 +29,8 @@ save_model = True
 model_dir = "models"
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
-save_frequency = 5  # Save model every N steps
+save_frequency = 100  # Save model every N steps
+test_frequency = 10  # Evaluate on test set every N steps
 
 random_seed = 1
 torch.backends.cudnn.enabled = False
@@ -39,7 +41,6 @@ test_loader = get_dataloader(batch_size=batch_size_test, targ_size=(224, 224), c
 
 # Load the model
 model = PeripheralFovealVisionModel()
-# model = torchvision.models.resnet50(pretrained=True)  # For testing before model is ready
 
 # Parallelize training across multiple GPUs
 # model = torch.nn.DataParallel(model)
@@ -64,42 +65,6 @@ writer.add_image('images', grid, 0)
 # Train the model...
 print(f"Starting training with {num_epochs} epochs, batch size of {batch_size_train}, learning rate {learning_rate}, on device {device}")
 model.zero_grad()
-
-def test(model, test_loader, loss_fn, step=0):
-    # Evaluate on Test set https://pytorch.org/tutorials/beginner/introyt/trainingyt.html
-    running_vloss = 0.0
-    model.eval()
-    with torch.no_grad():
-        # TODO: can we just evaluate on some of the test set?
-        # Set up the progress bar
-        logging.info(f"Evaluating on test set...")
-        progress_bar = tqdm(test_loader, desc=f"Test set progress", position=0, leave=True)
-        # TODO(alovekin): the loss requires the next bounding box, so this loop needs to look like the training loop does
-        for i, vdata in enumerate(progress_bar):
-            vinputs, vlabels = vdata
-            voutputs = model(vinputs)
-            vloss = loss_fn(voutputs, vlabels)
-            running_vloss += vloss
-            break  # Just do one batch for now, otherwise it'd take forever?
-    avg_vloss = running_vloss / (i + 1)
-    # Divide by number of frames in the batch
-    avg_vloss = avg_vloss / vlabels.shape[1]
-    print(f"Test loss: {avg_vloss:.4f}")
-
-    # Log the running loss averaged per batch
-    # for both training and validation
-    writer.add_scalar('Loss/validation',
-                    avg_vloss,
-                    step)
-    writer.flush()
-
-    # # Track best performance, and save the model's state
-    # if avg_vloss < best_vloss:
-    #     best_vloss = avg_vloss
-    #     # model_path = 'model_{}_{}'.format(timestamp, epoch)
-    #     # torch.save(model.state_dict(), model_path)
-    
-    return avg_vloss
 
 class SequenceIterator:
     """
@@ -131,6 +96,52 @@ class SequenceIterator:
     def __len__(self):
         return self.num_frames
 
+def test(model, test_loader, loss_fn, step=0):
+    # Evaluate on Test set https://pytorch.org/tutorials/beginner/introyt/trainingyt.html
+    running_vloss = 0.0
+    total_samples = 0.0
+    model.eval()
+    with torch.no_grad():
+        # TODO: can we just evaluate on some of the test set?
+        # Set up the progress bar
+        logging.info(f"Evaluating on test set...")
+        # progress_bar = tqdm(test_loader, desc=f"Test set progress", position=0, leave=True)  # Use for tqdm bar on entire test set
+        for i, vdata in enumerate(test_loader):
+            model.reset()  # Reset the hidden state
+            vinputs, vlabels = vdata
+            vinputs = vinputs.to(device)
+            vlabels = vlabels.to(device)
+            # Iterate through the sequence and test on each one
+            seq_iterator = SequenceIterator(vinputs, vlabels)
+            curr_inputs = None  # Evalulate on these so we have access to the "next" fixation
+            curr_labels = None
+            frame_progress_bar = tqdm(seq_iterator, total=vinputs.shape[1], desc=f"Test set progress", position=1, leave=True)
+            # TODO: show bounding box on image in tensorboard
+            for inputs, labels in frame_progress_bar:
+                if curr_inputs is None or curr_labels is None:
+                    # Already on device as views of larger tensors
+                    curr_inputs = inputs
+                    curr_labels = labels
+                    continue
+                total_samples += curr_labels.shape[0]
+                next_inputs = inputs
+                next_labels = labels
+                curr_bbox, next_fixation = model(curr_inputs)
+                vloss = loss_fn(curr_bbox, next_fixation, curr_labels, next_labels)
+                running_vloss += vloss
+                curr_inputs = next_inputs
+                curr_labels = next_labels
+            break  # Just do one batch for now, otherwise it'd take forever?
+    avg_vloss = running_vloss / total_samples  # Divide by total number of frames sampled across all batches
+    print(f"Test loss: {avg_vloss.item():.4f}")
+
+    # Log the running loss averaged per batch
+    writer.add_scalar('Loss/validation',
+                    avg_vloss,
+                    step)
+    writer.flush()  # Unnecessary?
+    return avg_vloss
+
 
 for epoch in tqdm(range(num_epochs)):
     epoch_progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}", position=0, leave=True)
@@ -142,11 +153,7 @@ for epoch in tqdm(range(num_epochs)):
         # Zero out the optimizer
         optimizer.zero_grad(set_to_none=True)
         model.zero_grad(set_to_none=True)
-        # Need to detach then reattach the hidden variables of the model to prevent 
-        # the gradient from propagating back in time
-        # (Setting to none causes them to be reinitialized)
-        model.buffer = None
-        model.fixation = None
+        model.reset()  # Reset the hidden state
 
         seq_inputs = seq_inputs.to(device)
         seq_labels = seq_labels.to(device)
@@ -157,7 +164,7 @@ for epoch in tqdm(range(num_epochs)):
         curr_labels = None
         # Iterate through the sequence and train on each one
         seq_iterator = SequenceIterator(seq_inputs, seq_labels)
-        frame_progress_bar = tqdm(seq_iterator, total=num_frames, desc=f"Step {step+1} progress", position=1, leave=None)
+        frame_progress_bar = tqdm(seq_iterator, total=num_frames, desc=f"Step {step+1} progress", position=1, leave=True)
         for inputs, labels in frame_progress_bar: 
             # Each iteration is a batch of sequences of images
             # Iterate through the sequence and train on each one
@@ -168,7 +175,6 @@ for epoch in tqdm(range(num_epochs)):
                 frame += 1
                 continue
             
-            #logging
             logging.debug(f"Current frame input shape: {curr_inputs.shape}")
             logging.debug(f"Current frame label shape: {curr_labels.shape}")
             if torch.cuda.is_available():
@@ -197,8 +203,6 @@ for epoch in tqdm(range(num_epochs)):
             curr_inputs = next_inputs
             curr_labels = next_labels
             frame += 1
-
-        
         epoch_progress_bar.set_postfix(
             loss=f"{total_loss.item() / total_samples:.4f}",
         )
@@ -216,10 +220,13 @@ for epoch in tqdm(range(num_epochs)):
         # Save model checkpoint
         if save_model and step % save_frequency == 0:
             date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-            model_path = os.path.join(model_dir, f"model_epoch_{epoch+1}_step_{step}_{date_str}.pth")
+            model_path = os.path.join(model_dir, f"{date_str}_model_epoch_{epoch+1}_step_{step}.pth")
             torch.save(model.state_dict(), model_path)
-            # Evaluate on Test set
-            # test_loss = test(model, test_loader, foveation_loss, step)
+
+        # Evaluate on test set
+        if step % test_frequency == 0:
+            test_loss = test(model, test_loader, foveation_loss, step)
+            model.train()  # Set back to train mode
 
     epoch_progress_bar.close()
     print(f"\nFinished epoch {epoch+1}/{num_epochs}, loss: {total_loss:.4f}")
