@@ -1,17 +1,22 @@
 # From https://moiseevigor.github.io/software/2022/12/18/one-pager-training-resnet-on-imagenet/
 # Simple example training ResNet on MNIST just as a proof of concept test for training.
 from datetime import datetime
+
 import torch
 import torchvision
+
 torchvision.disable_beta_transforms_warning()
+import logging
+
 import torchvision.transforms.functional as TF
 from torch.utils.tensorboard import SummaryWriter
-from dataset.vot_dataset import *
-from dataset.got10k_dataset import *
-from peripheral_foveal_vision_model import PeripheralFovealVisionModel
-from loss_functions import PeripheralFovealVisionModelLoss, IntersectionOverUnionLoss
 from tqdm import tqdm
-import logging
+
+from dataset.got10k_dataset import *
+from dataset.vot_dataset import *
+from loss_functions import (IntersectionOverUnionLoss,
+                            PeripheralFovealVisionModelLoss)
+from peripheral_foveal_vision_model import PeripheralFovealVisionModel
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)  # Change this to INFO or WARNING to reduce verbosity, or DEBUG for max spam
@@ -100,6 +105,7 @@ class SequenceIterator:
 
     def __len__(self):
         return self.num_frames
+    
 
 def bbox_to_img_coords(bbox, image):
     """ Convert a bounding box from [0, 1] range to image coordinates

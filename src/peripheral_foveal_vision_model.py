@@ -1,11 +1,14 @@
+import logging
+import math
+
 import torch
 from torch import nn
-from torchvision.models import resnet50, ResNet50_Weights
-from foveation_module import FoveationModule
-from torchvision.transforms import Resize
 from torchinfo import summary
-import math
-import logging
+from torchvision.models import ResNet50_Weights, resnet50
+from torchvision.transforms import Resize
+
+from foveation_module import FoveationModule
+
 # from typing import Tensor
 
 RESNET_DEFAULT_INPUT_SIZE = (224, 224)

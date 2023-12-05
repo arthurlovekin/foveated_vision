@@ -1,9 +1,9 @@
 """
 Methods for sampling points from an image tensor
 """
-import torch 
-from torch import nn
+import torch
 import torchvision.transforms.functional as TF
+from torch import nn
 from torchvision.transforms import Resize
 
 

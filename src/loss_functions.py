@@ -1,7 +1,8 @@
+import logging
+
 import torch
 import torchvision
 from torch import nn
-import logging
 
 # TODO: Could make all loss functions nn.Modules if they contain learnable parameters
 # (just swap out the __call__ for a forward method, and add (nn.Module) after the class name)

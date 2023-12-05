@@ -1,8 +1,9 @@
-from torch.utils.data import Dataset 
+import os
+
+import torch
+from torch.utils.data import Dataset
 from torchvision.io import read_image
 from torchvision.transforms import Resize
-import torch
-import os 
 
 """
 Dataset Properties:

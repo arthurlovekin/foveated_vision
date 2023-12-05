@@ -1,9 +1,10 @@
-from torch.utils.data import Dataset, DataLoader
-from torchvision.io import read_image
-from torchvision.transforms.v2 import Resize
+from os import path as Path
+
 import torch
 import torchvision
-from os import path as Path 
+from torch.utils.data import DataLoader, Dataset
+from torchvision.io import read_image
+from torchvision.transforms.v2 import Resize
 
 # /scratch/eecs542s001f23_class_root/eecs542s001f23_class/shared_data/foveated_vision/
 # LaSOT dataset 
