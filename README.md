@@ -17,3 +17,15 @@ This will start a webserver (e.g. at `http://localhost:6016/`) with information 
 If the Python extension is installed, VSCode will offer some built-in Tensorboard support. The displayed in-line quick-start button may not work with Great Lakes, since the Python module must first be loaded (see Setup).
 
 However, even without the plugin you can view the board in a VSCode tab (since VSCode is a web browser). When you start the board, just click "Preview in editor" on the pop-up that comes up.
+
+## Training on Great Lakes
+Request a standard GPU Basic Desktop instance with maximum RAM and cores, and one GPU. 
+It may take a few minutes to provision. 
+
+Start the VNC viewer (recommended) or SSH (not supported). 
+
+Make sure you have activated the environment first with `source setup.sh`. 
+
+To train the model, run `python3 src/train_model.py`. 
+
+Start a Tensorboard server to view results (see above). Model will periodically save checkpoints and run on the test set.
