@@ -44,13 +44,15 @@ test_loader = get_dataloader(batch_size=batch_size_test, targ_size=(224, 224), c
 # Load the model
 model = PeripheralFovealVisionModel()
 
+default_fovea_shape = model.get_default_fovea_size()
+
 # Parallelize training across multiple GPUs
 # model = torch.nn.DataParallel(model)
 
 # Set the model to run on the device
 model = model.to(device)
 
-foveation_loss = PeripheralFovealVisionModelLoss()
+foveation_loss = PeripheralFovealVisionModelLoss(default_fovea_shape=default_fovea_shape)
 foveation_loss.foveation_weight = 0.0  # TODO: Remove this, just for testing
 ce_loss = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
