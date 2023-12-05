@@ -147,7 +147,7 @@ class PeripheralFovealVisionModel(nn.Module):
             (self.peripheral_resolution[0], self.peripheral_resolution[1]),
             antialias=True,
         )
-        self.foveation_module = FoveationModule()
+        self.foveation_module = FoveationModule(bound_crops=False)
         self.peripheral_model = PeripheralModel()
         self.foveal_model = FovealModel()
         self.combiner_model = CombinerModel()
