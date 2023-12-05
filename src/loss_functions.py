@@ -10,7 +10,6 @@ def center_width_to_corners(boxes):
     """
     Convert fovea fixation parametrization from 
     (batched) [xcenter, ycenter, width, height] to [xlow, xhigh, ylow, yhigh]
-    (where all values are fractions from 0-1)
     boxes: [batch]x 4 tensor [xcenter, ycenter, width, height] 
     """
     xcenter = boxes[...,0:1]
@@ -82,6 +81,7 @@ class PeripheralFovealVisionModelLoss:
         """
         loss_iou = self.iou_loss(curr_bbox, true_curr_bbox)
 
+        # TODO: Just output 4 points directly from the model
         fixation_widths_heights = torch.ones_like(curr_bbox[...,2:4])*0.25
         fixation_bbox = torch.cat([next_fixation, fixation_widths_heights], dim=-1)
         fovea_corner_parametrization = center_width_to_corners(fixation_bbox)
