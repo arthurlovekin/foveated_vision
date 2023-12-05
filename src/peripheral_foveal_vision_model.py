@@ -153,10 +153,17 @@ class PeripheralFovealVisionModel(nn.Module):
         self.combiner_model = CombinerModel()
         self.position_encoding = None
         self.fixation_length = 2
-        self.current_fixation = None #torch.ones((self.batch_size, self.fixation_length), dtype=torch.float32)*0.5
-        self.feature_len = 2048*2+self.fixation_length # 2x resnet output + 2 for center of fixation (TODO: Make this dynamic)
+        self.current_fixation = None 
+        # self.feature_len = 2x2048 (resnet output) + 2 for center of fixation 
         self.buffer_len = 3
-        self.buffer = None #torch.zeros(self.batch_size, self.buffer_len, self.feature_len, dtype=torch.float32)
+        self.buffer = None 
+    
+    def reset(self):
+        # Need to detach then reattach the hidden variables of the model to prevent 
+        # the gradient from propagating back in time
+        # (Setting to none causes them to be reinitialized)
+        self.current_fixation = None 
+        self.buffer = None
 
     def forward(self, current_image):
         """
@@ -166,9 +173,7 @@ class PeripheralFovealVisionModel(nn.Module):
         # Initialize the current fixation if necessary
         if self.current_fixation is None:
             self.batch_size = current_image.shape[0]
-            self.current_fixation = torch.ones((self.batch_size, self.fixation_length), dtype=torch.float32)*0.5
-            if next(self.parameters()).is_cuda: # returns a boolean
-                self.current_fixation = self.current_fixation.cuda()
+            self.current_fixation = torch.ones((self.batch_size, self.fixation_length), dtype=torch.float32, device=current_image.device)*0.5
 
         # Extract features from the peripheral image
         background_img = self.downsampler(current_image)
@@ -190,9 +195,7 @@ class PeripheralFovealVisionModel(nn.Module):
 
         # Initialize the buffer if necessary 
         if self.buffer is None:
-            self.buffer = (torch.rand_like(all_features.unsqueeze(1).expand(-1,self.buffer_len,-1), dtype=torch.float32)-0.5)*0.1
-            if next(self.parameters()).is_cuda: # returns a boolean
-                self.buffer = self.buffer.cuda()
+            self.buffer = (torch.rand_like(all_features.unsqueeze(1).expand(-1,self.buffer_len,-1), dtype=torch.float32, device=current_image.device)-0.5)*0.1
         
         temp_buffer = torch.cat([all_features.unsqueeze(1), self.buffer], dim=1)
         logging.debug(f"Temp buffer shape: {temp_buffer.shape}")
@@ -202,6 +205,7 @@ class PeripheralFovealVisionModel(nn.Module):
         bbox, next_fixation = self.combiner_model(self.buffer)
         self.current_fixation = next_fixation.detach()
         return bbox, next_fixation 
+
 
 if __name__ == "__main__":
     batch_size=5
