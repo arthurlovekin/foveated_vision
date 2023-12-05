@@ -85,10 +85,10 @@ for epoch in range(num_epochs):
             curr_label = seq_labels[:,i,:]      
             next_label = seq_labels[:,i+1,:]
         
-            #logging Memory
-            if torch.cuda.is_available():
-                used_memory = torch.cuda.memory_allocated() / 1024**3
-                logging.info(f"Current used CUDA memory: {used_memory} GB")
+            # #logging Memory
+            # if torch.cuda.is_available():
+            #     used_memory = torch.cuda.memory_allocated() / 1024**3
+            #     logging.info(f"Current used CUDA memory: {used_memory} GB")
 
             # Run on the "current" frame to generate fixation for the "next" inputs (popped in the current iteration)
             curr_bbox, next_fixation = model(curr_frame)
