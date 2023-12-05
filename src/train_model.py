@@ -167,7 +167,6 @@ def test(model, test_loader, loss_fn, step=0):
                 next_inputs = inputs
                 next_labels = labels
                 curr_bbox, next_fixation = model(curr_inputs)
-                logging.info(f"Test loop: Current estimated bbox: {curr_bbox}")
                 # Add the bounding box to the list for visualization
                 images.append(curr_inputs)
                 bboxes.append(curr_bbox)
@@ -177,6 +176,7 @@ def test(model, test_loader, loss_fn, step=0):
                 curr_labels = next_labels
             # Create a grid of images with bounding boxes
             # For now, just show the first clip in the batch
+            logging.info(f"Test loop: first estimated bbox: {bboxes[0]}")
             bbox_grid = make_bbox_grid(images, bboxes)
             writer.add_image('images/test', bbox_grid, step)
             logging.info(f"Wrote image grid to tensorboard at step {step}")
