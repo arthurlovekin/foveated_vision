@@ -74,7 +74,7 @@ class IntersectionOverUnionLoss:
 
 class PeripheralFovealVisionModelLoss:
     def __init__(self,default_fovea_shape=(None,None)):
-        self.iou_loss = IntersectionOverUnionLoss(mode='default')
+        self.iou_loss = IntersectionOverUnionLoss(mode='generalized')
         # TODO: Make this independent of the image size?
         self.foveation_loss = FoveationLoss((224,224))
         self.iou_weight = 1.0
@@ -87,7 +87,7 @@ class PeripheralFovealVisionModelLoss:
             return torch.cat([
                     fixations,
                     torch.full_like(fixations[...,0:1],self.default_width),
-                    torch.full_like(fixations[...,0:1],self.default_width),
+                    torch.full_like(fixations[...,1:2],self.default_height),
                 ],axis=-1)
         else: 
             return fixations
@@ -100,7 +100,7 @@ class PeripheralFovealVisionModelLoss:
         """
         fixation_bbox = self.fix_fovea_if_needed(next_fixation)
         loss_iou = self.iou_loss(curr_bbox, true_curr_bbox)
-
+        print(loss_iou.tolist())
         # TODO: Just output 4 points directly from the model
         fovea_corner_parametrization = center_width_to_corners(fixation_bbox)
         loss_foveation = self.iou_loss(fovea_corner_parametrization, true_next_bbox)
