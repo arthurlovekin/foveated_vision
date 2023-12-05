@@ -4,26 +4,11 @@ import torch
 import torchvision
 from torch import nn
 
+from utils import center_width_to_corners
+
 # TODO: Could make all loss functions nn.Modules if they contain learnable parameters
 # (just swap out the __call__ for a forward method, and add (nn.Module) after the class name)
 
-def center_width_to_corners(boxes):
-    """
-    Convert fovea fixation parametrization from 
-    (batched) [xcenter, ycenter, width, height] to [xlow, xhigh, ylow, yhigh]
-    boxes: [batch]x 4 tensor [xcenter, ycenter, width, height] 
-    All values should be nonnegative (for this project should be in range 0-1)
-    """
-    xcenter = boxes[...,0:1]
-    ycenter = boxes[...,1:2]
-    width = boxes[...,2:3]
-    height = boxes[...,3:4]
-    xlow = xcenter - width/2
-    xhigh = xcenter + width/2
-    ylow = ycenter - height/2
-    yhigh = ycenter + height/2
-
-    return torch.cat([xlow,xhigh,ylow,yhigh],dim=-1)
 
 class FoveationLoss:
     def __init__(self,img_size):
@@ -114,17 +99,17 @@ class PeripheralFovealVisionModelLoss:
 
 if __name__ == "__main__": 
     # fl = FoveationLoss([2,2])
-    # xes = torch.tensor(
-    #     [[0,0],
-    #      [1,0],
-    #      [0,1],
-    #      [1,1],
-    #      [-1,-1],
-    #      [2,0.5],
-    #      [-0.5,2],
-    #      [2,2],
-    #     ])
-    # bbs = torch.tensor([[-1,1,-1,1]]*8)
+    xes = torch.tensor(
+        [[0,0],
+         [1,0],
+         [0,1],
+         [1,1],
+         [-1,-1],
+         [2,0.5],
+         [-0.5,2],
+         [2,2],
+        ])
+    bbs = torch.tensor([[-1,1,-1,1]]*8)
     # losses = fl(xes,bbs)
     # print(losses)
     # expected_losses = torch.tensor([[0,0,0,0,0,0.5,0.5,(2.0**0.5)/2]]).T
