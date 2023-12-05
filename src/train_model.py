@@ -87,15 +87,26 @@ class SequenceIterator:
         self.frame += 1
         return inputs, labels
 
-total_loss = 0.0
-total_samples = 0
+    def __len__(self):
+        return self.num_frames
+
+
 for epoch in tqdm(range(num_epochs)):
     epoch_progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}", position=0, leave=True)
     step = 0
     for seq_inputs, seq_labels in epoch_progress_bar:
+        total_loss = 0.0
+        total_samples = 0
+
         # Zero out the optimizer
         optimizer.zero_grad(set_to_none=True)
         model.zero_grad(set_to_none=True)
+        # Need to detach then reattach the hidden variables of the model to prevent 
+        # the gradient from propagating back in time
+        # (Setting to none causes them to be reinitialized)
+        model.buffer = None
+        model.fixation = None
+
         seq_inputs = seq_inputs.to(device)
         seq_labels = seq_labels.to(device)
         # Each iteration is a batch of sequences of images
@@ -116,6 +127,7 @@ for epoch in tqdm(range(num_epochs)):
                 frame += 1
                 continue
             
+            #logging
             logging.debug(f"Current frame input shape: {curr_inputs.shape}")
             logging.debug(f"Current frame label shape: {curr_labels.shape}")
             if torch.cuda.is_available():
@@ -138,11 +150,15 @@ for epoch in tqdm(range(num_epochs)):
 
             # Backward pass to accumulate gradients
             # https://stackoverflow.com/questions/53331540/accumulating-gradients
-            loss.backward(retain_graph=True)
-            writer.add_scalar('Loss/train_frame', loss.detach(), step*num_frames + frame)  # Loss for each frame
+            
+            # if seq_iterator.frame == len(seq_iterator)-1:
+            #     loss.backward()
+            # else:
+            #     loss.backward(retain_graph=True)
+            # writer.add_scalar('Loss/train_frame', loss.detach(), step*num_frames + frame)  # Loss for each frame
 
             # TODO: are these correct/meaningful?
-            total_loss += loss.detach().item()
+            total_loss += loss
             total_samples += curr_labels.shape[0]
 
             # Save current frame for next iteration
@@ -151,20 +167,22 @@ for epoch in tqdm(range(num_epochs)):
             frame += 1
 
             # Free up memory. Must be done manually? https://discuss.pytorch.org/t/gpu-memory-consumption-increases-while-training/2770
-            del loss, curr_bbox, next_fixation
+            # del loss, curr_bbox, next_fixation
         
         epoch_progress_bar.set_postfix(
-            loss=f"{total_loss / total_samples:.4f}",
+            loss=f"{total_loss.item() / total_samples:.4f}",
         )
         # Update the weights
+        total_loss.backward()
         optimizer.step()
+        logging.info('stepped')
         step += 1
 
         # Log training info
         writer.add_scalar('Loss/train', total_loss / total_samples, epoch)  # Average loss
 
         # Free up memory. Must be done manually? https://discuss.pytorch.org/t/gpu-memory-consumption-increases-while-training/2770
-        del seq_inputs, seq_labels, seq_iterator
+        # del seq_inputs, seq_labels, seq_iterator
         # TODO: Evaluate on test set
         # TODO: Save checkpoint
 

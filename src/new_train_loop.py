@@ -68,6 +68,7 @@ for epoch in range(num_epochs):
         model.zero_grad(set_to_none=True)
 
         # Need to detach then reattach the hidden variables of the model 
+        # (Setting to none causes them to be reinitialized)
         model.buffer = None 
         model.current_fixation = None
 
