@@ -17,18 +17,17 @@ logging.basicConfig(level=logging.INFO)  # Change this to INFO or WARNING to red
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 num_epochs = 3
-batch_size_train = 2
+batch_size_train = 3
 batch_size_test = 10
 learning_rate = 0.01
 momentum = 0.5
-log_interval = 10
 clip_length_s_train = 0.5
 clip_length_s_test = 1
 save_model = True
 model_dir = "models"
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
-save_frequency = 100  # Save model every N steps
+save_frequency = 5  # Save model every N steps
 
 random_seed = 1
 torch.backends.cudnn.enabled = False
@@ -64,6 +63,41 @@ writer.add_image('images', grid, 0)
 # Train the model...
 print(f"Starting training with {num_epochs} epochs, batch size of {batch_size_train}, learning rate {learning_rate}, on device {device}")
 model.zero_grad()
+
+def test(model, test_loader, loss_fn, step=0):
+    # Evaluate on Test set https://pytorch.org/tutorials/beginner/introyt/trainingyt.html
+    running_vloss = 0.0
+    model.eval()
+    with torch.no_grad():
+        # TODO: can we just evaluate on some of the test set?
+        # Set up the progress bar
+        logging.info(f"Evaluating on test set...")
+        progress_bar = tqdm(test_loader, desc=f"Test set progress", position=0, leave=True)
+        for i, vdata in progress_bar:
+            vinputs, vlabels = vdata
+            voutputs = model(vinputs)
+            vloss = loss_fn(voutputs, vlabels)
+            running_vloss += vloss
+            break  # Just do one batch for now, otherwise it'd take forever?
+    avg_vloss = running_vloss / (i + 1)
+    # Divide by number of frames in the batch
+    avg_vloss = avg_vloss / vlabels.shape[1]
+    print(f"Test loss: {avg_vloss:.4f}")
+
+    # Log the running loss averaged per batch
+    # for both training and validation
+    writer.add_scalar('Loss/validation',
+                    avg_vloss,
+                    step)
+    writer.flush()
+
+    # # Track best performance, and save the model's state
+    # if avg_vloss < best_vloss:
+    #     best_vloss = avg_vloss
+    #     # model_path = 'model_{}_{}'.format(timestamp, epoch)
+    #     # torch.save(model.state_dict(), model_path)
+    
+    return avg_vloss
 
 class SequenceIterator:
     """
@@ -177,43 +211,15 @@ for epoch in tqdm(range(num_epochs)):
         # Log training info
         writer.add_scalar('Loss/train', total_loss, step)  # Average loss
 
-        # TODO: Evaluate on test set
-
         # Save model checkpoint
         if save_model and step % save_frequency == 0:
             model_path = os.path.join(model_dir, f"model_checkpoint_epoch_{epoch+1}_step_{step}.pth")
             torch.save(model.state_dict(), model_path)
+            # Evaluate on Test set
+            # test_loss = test(model, test_loader, foveation_loss, step)
 
     epoch_progress_bar.close()
     print(f"\nFinished epoch {epoch+1}/{num_epochs}, loss: {total_loss:.4f}")
 
-def test(model, test_loader, loss_fn):
-    # Evaluate on Test set https://pytorch.org/tutorials/beginner/introyt/trainingyt.html
-    running_vloss = 0.0
-    model.eval()
-    with torch.no_grad():
-        for i, vdata in enumerate(test_loader):
-            vinputs, vlabels = vdata
-            voutputs = model(vinputs)
-            vloss = loss_fn(voutputs, vlabels)
-            running_vloss += vloss
-
-    avg_vloss = running_vloss / (i + 1)
-    print(f"Test loss: {avg_vloss:.4f}")
-
-    # Log the running loss averaged per batch
-    # for both training and validation
-    writer.add_scalars('Training vs. Validation Loss',
-                    {'Validation' : avg_vloss },
-                    epoch + 1)
-    writer.flush()
-
-    # # Track best performance, and save the model's state
-    # if avg_vloss < best_vloss:
-    #     best_vloss = avg_vloss
-    #     # model_path = 'model_{}_{}'.format(timestamp, epoch)
-    #     # torch.save(model.state_dict(), model_path)
-    
-    return avg_vloss
 
 print(f"\nFinished training, Loss: {total_loss:.4f}")
