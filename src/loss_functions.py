@@ -10,6 +10,7 @@ def center_width_to_corners(boxes):
     """
     Convert fovea fixation parametrization from 
     (batched) [xcenter, ycenter, width, height] to [xlow, xhigh, ylow, yhigh]
+    (where all values are fractions from 0-1)
     boxes: [batch]x 4 tensor [xcenter, ycenter, width, height] 
     """
     xcenter = boxes[...,0:1]
@@ -20,7 +21,15 @@ def center_width_to_corners(boxes):
     xhigh = xcenter + width/2
     ylow = ycenter - height/2
     yhigh = ycenter + height/2
-    return torch.cat([xlow,xhigh,ylow,yhigh],dim=-1)
+    output = torch.cat([xlow,xhigh,ylow,yhigh],dim=-1)
+    # logging.info(f"Boxes shape: {boxes.shape}")
+    # logging.info(f"first boxes: {boxes[0]}")
+    # logging.info(f"Center Parametrization xcenter shape: {xcenter.shape}")
+    # logging.info(f"Center Parametrization width shape: {width.shape}")
+    # logging.info(f"Corner Parametrization xlow shape: {xlow.shape}")
+    # logging.info(f"Corner Parametrization output shape: {output.shape}")
+    
+    return output
 
 class FoveationLoss:
     def __init__(self,img_size):
@@ -72,9 +81,13 @@ class PeripheralFovealVisionModelLoss:
         2. Foveation loss between the next fixation and the ground-truth bounding box (from the next timestep)
         """
         loss_iou = self.iou_loss(curr_bbox, true_curr_bbox)
-        fovea_corner_parametrization = center_width_to_corners(next_fixation)
-        # loss_foveation = self.iou_loss(fovea_corner_parametrization, true_next_bbox)
-        loss_foveation = self.foveation_loss(next_fixation, true_next_bbox)
+
+        fixation_widths_heights = torch.ones_like(curr_bbox[...,2:4])*0.25
+        fixation_bbox = torch.cat([next_fixation, fixation_widths_heights], dim=-1)
+        fovea_corner_parametrization = center_width_to_corners(fixation_bbox)
+        loss_foveation = self.iou_loss(fovea_corner_parametrization, true_next_bbox)
+        
+        # loss_foveation = self.foveation_loss(next_fixation, true_next_bbox)
         return loss_iou + loss_foveation
         # Experimental: penalize scale of bounding box so it doesn't get too big.
         # Boxes should be normalized to [0,1], so penalize anything outside of that range
