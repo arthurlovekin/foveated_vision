@@ -245,6 +245,7 @@ for epoch in range(num_epochs):
             # Run on the "current" frame to generate fixation for the "next" inputs (popped in the current iteration)
             curr_bbox, next_fixation = model(curr_inputs)
             logging.debug(f"Current estimated bbox: {curr_bbox}")
+            logging.debug(f"Currrent true bbox: {curr_labels}")
             logging.debug(f"Next fixation: {next_fixation}")
             loss = foveation_loss(curr_bbox, next_fixation, curr_labels, next_labels)
             loss = loss

@@ -63,8 +63,9 @@ class VotDataset(Dataset):
         viddir = Path.join(self.basedir,'sequences',vidname)
         with open(Path.join(viddir,'groundtruth.txt'),'r') as file: 
             groundtruth = torch.tensor([[float(elt) for elt in line.split(',')] for line in file.readlines() if len(line) != 0])
-        first = self.resize(read_image(Path.join(viddir,f'color/{1:08d}.jpg')))
-        groundtruth = groundtruth[start_idx:end_idx,:] / torch.tensor([first.shape[-1],first.shape[-2],first.shape[-1],first.shape[-2]])
+        img = read_image(Path.join(viddir,f'color/{1:08d}.jpg'))
+        first = self.resize(img)
+        groundtruth = groundtruth[start_idx:end_idx,:] / torch.tensor([img.shape[-1],img.shape[-2],img.shape[-1],img.shape[-2]])
         # Groundtruth may have lines with [Nan, Nan, Nan, Nan], but we need labels at every timestep
         # TODO: interpolate the groundtruth labels
         # For now, just replicate the last non-Nan label
