@@ -51,14 +51,14 @@ class IntersectionOverUnionLoss:
         elif self.mode == 'generalized':
             return torchvision.ops.generalized_box_iou_loss(box1, box2, reduction='sum')
         elif self.mode == 'neg_iou_generalised':
-            return - torchvision.ops.generalized_box_iou(box1, box2, reduction='sum')
+            return - torch.sum(torchvision.ops.generalized_box_iou(box1, box2,))
         else:
             return torch.sum(torchvision.ops.box_iou(box1, box2)[0])
         
 
 class PeripheralFovealVisionModelLoss:
     def __init__(self,default_fovea_shape=(None,None)):
-        self.iou_loss = IntersectionOverUnionLoss()
+        self.iou_loss = IntersectionOverUnionLoss(mode='generalized')
         # TODO: Make this independent of the image size?
         self.foveation_loss = FoveationLoss((224,224))
         self.iou_weight = 1.0
@@ -71,7 +71,7 @@ class PeripheralFovealVisionModelLoss:
             return torch.cat([
                     fixations,
                     torch.full_like(fixations[...,0:1],self.default_width),
-                    torch.full_like(fixations[...,0:1],self.default_width),
+                    torch.full_like(fixations[...,1:2],self.default_height),
                 ],axis=-1)
         else: 
             return fixations
@@ -86,13 +86,13 @@ class PeripheralFovealVisionModelLoss:
         print(f'bbox: predicted{curr_bbox} ')
         print(f'bbox: actual   {true_curr_bbox} ')
         loss_iou = self.iou_loss(curr_bbox, true_curr_bbox)
-
+        print(loss_iou.tolist())
         # TODO: Just output 4 points directly from the model
         fovea_corner_parametrization = center_width_to_corners(fixation_bbox)
         print(f'fovea: predicted{fovea_corner_parametrization} ')
         print(f'fovea: actual   {true_next_bbox} ')
         loss_foveation = self.iou_loss(fovea_corner_parametrization, true_next_bbox)
-        print(loss_foveation,loss_iou)
+        print(loss_foveation.tolist())
         # loss_foveation = self.foveation_loss(next_fixation, true_next_bbox)
         return self.iou_weight*loss_iou + self.foveation_weight*loss_foveation
 
