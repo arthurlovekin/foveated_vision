@@ -71,7 +71,7 @@ class IntersectionOverUnionLoss:
 
 class PeripheralFovealVisionModelLoss:
     def __init__(self,default_fovea_shape=(None,None)):
-        self.iou_loss = IntersectionOverUnionLoss(mode='complete')
+        self.iou_loss = IntersectionOverUnionLoss(mode='default')
         # TODO: Make this independent of the image size?
         self.foveation_loss = FoveationLoss((224,224))
         self.iou_weight = 1.0
