@@ -24,6 +24,11 @@ momentum = 0.5
 log_interval = 10
 clip_length_s_train = 0.5
 clip_length_s_test = 1
+save_model = True
+model_dir = "models"
+if not os.path.exists(model_dir):
+    os.makedirs(model_dir)
+save_frequency = 100  # Save model every N steps
 
 random_seed = 1
 torch.backends.cudnn.enabled = False
@@ -134,7 +139,7 @@ for epoch in tqdm(range(num_epochs)):
                 # logging.info(torch.cuda.memory_summary(device=device, abbreviated=False))  # Very verbose
                 # Get free CUDA memory in GiB
                 used_memory = torch.cuda.memory_allocated() / 1024**3
-                logging.info(f"Current used CUDA memory: {used_memory}")
+                logging.debug(f"Current used CUDA memory: {used_memory}")
                 writer.add_scalar('Memory/CUDA_used_GiB', used_memory, step*num_frames + frame)
 
             # Already on device as views of larger tensors
@@ -146,7 +151,7 @@ for epoch in tqdm(range(num_epochs)):
             logging.debug(f"Current estimated bbox: {curr_bbox}")
             logging.debug(f"Next fixation: {next_fixation}")
             loss = foveation_loss(curr_bbox, next_fixation, curr_labels, next_labels)
-            loss = loss/num_frames
+            loss = loss
 
             # Backward pass to accumulate gradients
             # https://stackoverflow.com/questions/53331540/accumulating-gradients
@@ -155,7 +160,7 @@ for epoch in tqdm(range(num_epochs)):
             #     loss.backward()
             # else:
             #     loss.backward(retain_graph=True)
-            # writer.add_scalar('Loss/train_frame', loss.detach(), step*num_frames + frame)  # Loss for each frame
+            writer.add_scalar('Loss/train_frame', loss.detach(), step*num_frames + frame)  # Loss for each frame
 
             # TODO: are these correct/meaningful?
             total_loss += loss
@@ -173,19 +178,24 @@ for epoch in tqdm(range(num_epochs)):
             loss=f"{total_loss.item() / total_samples:.4f}",
         )
         # Update the weights
+        # Make sure loss values don't depend on batch size or frame count
+        total_loss = total_loss / total_samples
         total_loss.backward()
         optimizer.step()
-        logging.info('stepped')
         step += 1
 
         # Log training info
-        writer.add_scalar('Loss/train', total_loss / total_samples, epoch)  # Average loss
+        writer.add_scalar('Loss/train', total_loss, step)  # Average loss
 
         # Free up memory. Must be done manually? https://discuss.pytorch.org/t/gpu-memory-consumption-increases-while-training/2770
         # del seq_inputs, seq_labels, seq_iterator
         # TODO: Evaluate on test set
-        # TODO: Save checkpoint
+
+        # Save model checkpoint
+        if save_model and step % save_frequency == 0:
+            model_path = os.path.join(model_dir, f"model_checkpoint_epoch_{epoch+1}_step_{step}.pth")
+            torch.save(model.state_dict(), model_path)
 
     epoch_progress_bar.close()
-    print(f"\nFinished epoch {epoch+1}/{num_epochs}, loss: {total_loss / total_samples:.4f}")
-print(f"\nFinished training, Loss: {total_loss / total_samples:.4f}")
+    print(f"\nFinished epoch {epoch+1}/{num_epochs}, loss: {total_loss:.4f}")
+print(f"\nFinished training, Loss: {total_loss:.4f}")
