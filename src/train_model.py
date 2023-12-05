@@ -212,21 +212,21 @@ for epoch in tqdm(range(num_epochs)):
         # Calculate the gradient of the accumulated loss only at the end of the loop (not inside)
         total_loss.backward()
         optimizer.step()
-        step += 1
 
         # Log training info
         writer.add_scalar('Loss/train', total_loss, step)  # Average loss
-
-        # Save model checkpoint
-        if save_model and step % save_frequency == 0:
-            date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-            model_path = os.path.join(model_dir, f"{date_str}_model_epoch_{epoch+1}_step_{step}.pth")
-            torch.save(model.state_dict(), model_path)
 
         # Evaluate on test set
         if step % test_frequency == 0:
             test_loss = test(model, test_loader, foveation_loss, step)
             model.train()  # Set back to train mode
+
+        # Save model checkpoint
+        if save_model and step % save_frequency == 0 and step != 0:
+            date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+            model_path = os.path.join(model_dir, f"{date_str}_model_epoch_{epoch+1}_step_{step}.pth")
+            torch.save(model.state_dict(), model_path)
+        step += 1
 
     epoch_progress_bar.close()
     print(f"\nFinished epoch {epoch+1}/{num_epochs}, loss: {total_loss:.4f}")
