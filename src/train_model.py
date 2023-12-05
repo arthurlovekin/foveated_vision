@@ -4,6 +4,7 @@ from datetime import datetime
 import torch
 import torchvision
 torchvision.disable_beta_transforms_warning()
+import torchvision.transforms.functional as TF
 from torch.utils.tensorboard import SummaryWriter
 from dataset.vot_dataset import *
 from dataset.got10k_dataset import *
@@ -31,6 +32,7 @@ if not os.path.exists(model_dir):
     os.makedirs(model_dir)
 save_frequency = 100  # Save model every N steps
 test_frequency = 10  # Evaluate on test set every N steps
+use_epoch_progress_bar = False  # Use epoch progress bar in addition to step progress bar
 
 random_seed = 1
 torch.backends.cudnn.enabled = False
@@ -49,11 +51,12 @@ model = PeripheralFovealVisionModel()
 model = model.to(device)
 
 foveation_loss = PeripheralFovealVisionModelLoss()
+foveation_loss.foveation_weight = 0.0  # TODO: Remove this, just for testing
 ce_loss = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 # Set up Tensorboard logging
-writer = SummaryWriter()
+writer = SummaryWriter(flush_secs=2)
 # Show a batch of images
 images, labels = next(iter(train_loader))
 # images = images[0, :, :, :, :]  # Remove the batch dimension so we can display an entire sequence
@@ -96,6 +99,41 @@ class SequenceIterator:
     def __len__(self):
         return self.num_frames
 
+def bbox_to_img_coords(bbox, image):
+    """ Convert a bounding box from [0, 1] range to image coordinates
+    Also ensure that the bounding box is within the image bounds and
+    clip if necessary.
+    Args:
+        bbox (torch.tensor): (batch, 4) bounding box
+        image (torch.tensor): (channels, height, width) image
+    """
+    # Convert each corner and clip to image bounds
+    bbox[:, 0] = torch.clamp(bbox[:, 0] * image.shape[2], min=0, max=image.shape[2])
+    bbox[:, 1] = torch.clamp(bbox[:, 1] * image.shape[1], min=0, max=image.shape[1])
+    bbox[:, 2] = torch.clamp(bbox[:, 2] * image.shape[2], min=0, max=image.shape[2])
+    bbox[:, 3] = torch.clamp(bbox[:, 3] * image.shape[1], min=0, max=image.shape[1])
+    return bbox
+
+def make_bbox_grid(images, bboxes):
+    """ 
+    Create a grid of images with bounding boxes
+    Args:
+        images (list): List of images, each of shape (batch, channels, height, width)
+        bboxes (list): List of bounding boxes, each of shape (batch, 4)
+    """
+    # For now, just show the first clip in the batch
+    batch_ind = 0
+    bbox_list = []
+    for i in range(len(images)):
+        image = TF.convert_image_dtype(images[i][batch_ind, :, :, :], dtype=torch.uint8)
+        # Requires a dimension to possibly display multiple bounding boxes
+        bbox = bboxes[i][batch_ind, :].unsqueeze(0)
+        # Convert bounding boxes from [0, 1] range to image coordinates
+        bbox = bbox_to_img_coords(bbox, image) # Also clips to image dimensions
+        bbox_list.append(torchvision.utils.draw_bounding_boxes(image, bbox, colors=["green"], width=5))
+    bbox_grid = torchvision.utils.make_grid(bbox_list)
+    return bbox_grid
+
 def test(model, test_loader, loss_fn, step=0):
     # Evaluate on Test set https://pytorch.org/tutorials/beginner/introyt/trainingyt.html
     running_vloss = 0.0
@@ -116,6 +154,8 @@ def test(model, test_loader, loss_fn, step=0):
             curr_inputs = None  # Evalulate on these so we have access to the "next" fixation
             curr_labels = None
             frame_progress_bar = tqdm(seq_iterator, total=vinputs.shape[1], desc=f"Test set progress", position=1, leave=True)
+            bboxes = []  # For tensorboard visualization.
+            images = []  # For tensorboard visualization.
             # TODO: show bounding box on image in tensorboard
             for inputs, labels in frame_progress_bar:
                 if curr_inputs is None or curr_labels is None:
@@ -127,10 +167,20 @@ def test(model, test_loader, loss_fn, step=0):
                 next_inputs = inputs
                 next_labels = labels
                 curr_bbox, next_fixation = model(curr_inputs)
+                logging.info(f"Test loop: Current estimated bbox: {curr_bbox}")
+                # Add the bounding box to the list for visualization
+                images.append(curr_inputs)
+                bboxes.append(curr_bbox)
                 vloss = loss_fn(curr_bbox, next_fixation, curr_labels, next_labels)
                 running_vloss += vloss
                 curr_inputs = next_inputs
                 curr_labels = next_labels
+            # Create a grid of images with bounding boxes
+            # For now, just show the first clip in the batch
+            bbox_grid = make_bbox_grid(images, bboxes)
+            writer.add_image('images/test', bbox_grid, step)
+            logging.info(f"Wrote image grid to tensorboard at step {step}")
+            writer.flush()  # Necessary, otherwise tensorboard doesn't update
             break  # Just do one batch for now, otherwise it'd take forever?
     avg_vloss = running_vloss / total_samples  # Divide by total number of frames sampled across all batches
     print(f"Test loss: {avg_vloss.item():.4f}")
@@ -143,10 +193,13 @@ def test(model, test_loader, loss_fn, step=0):
     return avg_vloss
 
 
-for epoch in tqdm(range(num_epochs)):
-    epoch_progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}", position=0, leave=True)
+for epoch in range(num_epochs):
+    logging.info(f"Starting epoch {epoch+1}/{num_epochs}")
+    epoch_progress_bar = None
+    if use_epoch_progress_bar:
+        epoch_progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}", position=0, leave=True)  # Update position of other bars if using.
     step = 0
-    for seq_inputs, seq_labels in epoch_progress_bar:
+    for seq_inputs, seq_labels in train_loader:
         total_loss = 0.0
         total_samples = 0
 
@@ -164,7 +217,8 @@ for epoch in tqdm(range(num_epochs)):
         curr_labels = None
         # Iterate through the sequence and train on each one
         seq_iterator = SequenceIterator(seq_inputs, seq_labels)
-        frame_progress_bar = tqdm(seq_iterator, total=num_frames, desc=f"Step {step+1} progress", position=1, leave=True)
+        frame_progress_bar = tqdm(seq_iterator, total=num_frames, desc=f"Step {step+1} progress",
+                                  position=(1 if use_epoch_progress_bar else 0), leave=True)
         for inputs, labels in frame_progress_bar: 
             # Each iteration is a batch of sequences of images
             # Iterate through the sequence and train on each one
@@ -203,9 +257,10 @@ for epoch in tqdm(range(num_epochs)):
             curr_inputs = next_inputs
             curr_labels = next_labels
             frame += 1
-        epoch_progress_bar.set_postfix(
-            loss=f"{total_loss.item() / total_samples:.4f}",
-        )
+        if use_epoch_progress_bar:
+            epoch_progress_bar.set_postfix(
+                loss=f"{total_loss.item() / total_samples:.4f}",
+            )
         # Update the weights
         # Make sure loss values don't depend on batch size or frame count
         total_loss = total_loss / total_samples
@@ -228,7 +283,8 @@ for epoch in tqdm(range(num_epochs)):
             torch.save(model.state_dict(), model_path)
         step += 1
 
-    epoch_progress_bar.close()
+    if use_epoch_progress_bar:
+        epoch_progress_bar.close()
     print(f"\nFinished epoch {epoch+1}/{num_epochs}, loss: {total_loss:.4f}")
 
 
