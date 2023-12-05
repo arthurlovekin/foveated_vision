@@ -6,6 +6,22 @@ import logging
 # TODO: Could make all loss functions nn.Modules if they contain learnable parameters
 # (just swap out the __call__ for a forward method, and add (nn.Module) after the class name)
 
+def center_width_to_corners(boxes):
+    """
+    Convert fovea fixation parametrization from 
+    (batched) [xcenter, ycenter, width, height] to [xlow, xhigh, ylow, yhigh]
+    boxes: [batch]x 4 tensor [xcenter, ycenter, width, height] 
+    """
+    xcenter = boxes[...,0:1]
+    ycenter = boxes[...,1:2]
+    width = boxes[...,2:3]
+    height = boxes[...,3:4]
+    xlow = xcenter - width/2
+    xhigh = xcenter + width/2
+    ylow = ycenter - height/2
+    yhigh = ycenter + height/2
+    return torch.cat([xlow,xhigh,ylow,yhigh],dim=-1)
+
 class FoveationLoss:
     def __init__(self,img_size):
         self.img_size = img_size
@@ -26,6 +42,8 @@ class FoveationLoss:
         dist_squared = xdist**2 + ydist**2
         # Sum over batch dimension
         return torch.sum(dist_squared,dim=0)
+    
+
 
 class IntersectionOverUnionLoss:
     def __init__(self): 
@@ -54,14 +72,17 @@ class PeripheralFovealVisionModelLoss:
         2. Foveation loss between the next fixation and the ground-truth bounding box (from the next timestep)
         """
         loss_iou = self.iou_loss(curr_bbox, true_curr_bbox)
-        loss_foveation = self.foveation_loss(next_fixation, true_next_bbox)
+        fovea_corner_parametrization = center_width_to_corners(next_fixation)
+        loss_foveation = self.iou_loss(fovea_corner_parametrization, true_next_bbox)
+        # loss_foveation = self.foveation_loss(next_fixation, true_next_bbox)
+        return loss_iou + loss_foveation
         # Experimental: penalize scale of bounding box so it doesn't get too big.
         # Boxes should be normalized to [0,1], so penalize anything outside of that range
         # Doesn't seem gradient-friendly...
         # loss_scale = torch.abs(curr_bbox - torch.clamp(curr_bbox,0.0,1.0)).sum(dim=1).sum(dim=0)
         # loss_scale = torch.abs(curr_bbox).sum(dim=1).sum(dim=0)  # Just penalize the size of the box?
-        loss_scale = torch.abs(curr_bbox - true_curr_bbox).sum() # Penalize distance of each corner for the ground truth box
-        return self.scale_weight*loss_scale + self.iou_weight*loss_iou + self.foveation_weight*loss_foveation
+        # loss_scale = torch.abs(curr_bbox - true_curr_bbox).sum() # Penalize distance of each corner for the ground truth box
+        # return self.scale_weight*loss_scale + self.iou_weight*loss_iou + self.foveation_weight*loss_foveation
 
 
 if __name__ == "__main__": 
