@@ -153,16 +153,7 @@ for epoch in tqdm(range(num_epochs)):
             loss = foveation_loss(curr_bbox, next_fixation, curr_labels, next_labels)
             loss = loss
 
-            # Backward pass to accumulate gradients
-            # https://stackoverflow.com/questions/53331540/accumulating-gradients
-            
-            # if seq_iterator.frame == len(seq_iterator)-1:
-            #     loss.backward()
-            # else:
-            #     loss.backward(retain_graph=True)
             writer.add_scalar('Loss/train_frame', loss.detach(), step*num_frames + frame)  # Loss for each frame
-
-            # TODO: are these correct/meaningful?
             total_loss += loss
             total_samples += curr_labels.shape[0]
 
@@ -171,8 +162,6 @@ for epoch in tqdm(range(num_epochs)):
             curr_labels = next_labels
             frame += 1
 
-            # Free up memory. Must be done manually? https://discuss.pytorch.org/t/gpu-memory-consumption-increases-while-training/2770
-            # del loss, curr_bbox, next_fixation
         
         epoch_progress_bar.set_postfix(
             loss=f"{total_loss.item() / total_samples:.4f}",
@@ -180,6 +169,7 @@ for epoch in tqdm(range(num_epochs)):
         # Update the weights
         # Make sure loss values don't depend on batch size or frame count
         total_loss = total_loss / total_samples
+        # Calculate the gradient of the accumulated loss only at the end of the loop (not inside)
         total_loss.backward()
         optimizer.step()
         step += 1
