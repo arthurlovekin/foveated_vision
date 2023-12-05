@@ -177,8 +177,6 @@ for epoch in tqdm(range(num_epochs)):
         # Log training info
         writer.add_scalar('Loss/train', total_loss, step)  # Average loss
 
-        # Free up memory. Must be done manually? https://discuss.pytorch.org/t/gpu-memory-consumption-increases-while-training/2770
-        # del seq_inputs, seq_labels, seq_iterator
         # TODO: Evaluate on test set
 
         # Save model checkpoint
