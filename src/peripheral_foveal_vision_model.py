@@ -111,6 +111,7 @@ class CombinerModel(nn.Module):
             nn.Linear(self.sequence_dim, fixation_length),
             nn.Sigmoid(), # make outputs 0-1
         )
+        self.min_fovea_width = 0.01
 
     def forward(self, all_features_buffer):
         # Transformer expects input of shape (batch, seq_len, feature_len)
@@ -123,6 +124,11 @@ class CombinerModel(nn.Module):
         latent_seq = latent_seq.reshape((latent_seq.shape[0], -1))
         bbox = self.bbox_head(latent_seq)
         pos = self.pos_head(latent_seq)
+
+        # Hack: to prevent the fovea from shrinking to nothing, add the minimum width to one corner 
+        # (will shift range to 0.01-1.01, but that's fine)
+        bbox[..., 2:4] += self.min_fovea_width
+
         return bbox, pos 
 
 class CombinerModelTimeSeriesTransformer(nn.Module):
@@ -212,6 +218,7 @@ class PeripheralFovealVisionModel(nn.Module):
         logging.debug(f"Buffer shape: {self.buffer.shape}")
 
         bbox, next_fixation = self.combiner_model(self.buffer)
+        # TODO: Is detach necessary vvv?
         self.current_fixation = next_fixation.detach()
         return bbox, next_fixation 
 
