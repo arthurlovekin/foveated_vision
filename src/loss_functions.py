@@ -38,8 +38,10 @@ class IntersectionOverUnionLoss:
     Converts a variety of IoU functions into loss functions (IoU alone is not what you want to minimize)
     https://learnopencv.com/iou-loss-functions-object-detection/#ciou-complete-iou-loss
     """
-    def __init__(self, mode='complete'): 
+    def __init__(self, mode='complete', min_sidelength_threshold=0.01): 
         self.mode = mode
+        self.min_sidelength_threshold = min_sidelength_threshold
+
     
     def __call__(self,box1,box2): 
         """
@@ -47,26 +49,27 @@ class IntersectionOverUnionLoss:
         box2: tensor of shape [batch, 4] where the 4 values are [x1,y1,x2,y2] (bounding box corners)
         """
         if self.mode == 'distance':
-            # # x1 + x2 / 2, y1 + y2 / 2 
-            # centers1 = (box1[...,0:2] + box1[...,2:4]) / 2.0
-            # centers2 = (box2[...,0:2] + box2[...,2:4]) / 2.0
-            # center_distance_squared = torch.sum((centers1 - centers2)**2,dim=-1)
-
-            # # Find max between two possible diagonal distances
-            # corner_distance_squared = max(torch.sum(box1[...,0:2]**2,dim=-1),torch.sum(box1[...,2:4]**2,dim=-1))
-            # distance_iou_loss = 1.0 - iou + center_distance_squared / center_distance_squared
-            # return torch.sum(torchvision.ops.complete_box_iou(box1, box2)[0])
-            return torchvision.ops.distance_box_iou_loss(box1, box2, reduction='sum')
-        if self.mode == 'complete':
-            return torchvision.ops.complete_box_iou_loss(box1, box2, reduction='sum')
+            loss = torchvision.ops.distance_box_iou_loss(box1, box2, reduction='sum')
+        elif self.mode == 'complete':
+            loss = torchvision.ops.complete_box_iou_loss(box1, box2, reduction='sum')
         elif self.mode == 'generalized':
-        # Seems strictly worse than distance and complete
-            return torchvision.ops.generalized_box_iou_loss(box1, box2, reduction='sum')
+            # Seems strictly worse than distance and complete
+            loss = torchvision.ops.generalized_box_iou_loss(box1, box2, reduction='sum')
         else:
             # box_iou returns NxM matrix containing the pairwise IoU values for every element in boxes1 and boxes2
             # so sum over the diagonal, where the ground-truth box is matched to the predicted box
             batch_size = box1.shape[0] if len(box1.shape) > 1 else 1
-            return 1.0*batch_size - torch.sum(torch.diag(torchvision.ops.box_iou(box1, box2)))
+            loss = 1.0*batch_size - torch.sum(torch.diag(torchvision.ops.box_iou(box1, box2)))
+        # warn if loss is nan
+        if loss != loss: 
+            logging.warning(f"NaN loss, box1: {box1}, box2: {box2}")
+        # # warn if one box has no area
+        # if torch.abs(box1[...,2:4] - box1[..., 0:2]) <= torch.ones_like(box1[...,2:4])*self.min_sidelength_threshold:
+        #     logging.warning(f"Box1 has no area: {box1}")
+        # if torch.abs(box2[...,2:4] - box2[..., 0:2]) <= torch.ones_like(box2[...,2:4])*self.min_sidelength_threshold:
+        #     logging.warning(f"Box2 has no area: {box2}")
+        
+        return loss
         
 
 class PeripheralFovealVisionModelLoss:
