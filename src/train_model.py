@@ -186,4 +186,34 @@ for epoch in tqdm(range(num_epochs)):
 
     epoch_progress_bar.close()
     print(f"\nFinished epoch {epoch+1}/{num_epochs}, loss: {total_loss:.4f}")
+
+def test(model, test_loader, loss_fn):
+    # Evaluate on Test set https://pytorch.org/tutorials/beginner/introyt/trainingyt.html
+    running_vloss = 0.0
+    model.eval()
+    with torch.no_grad():
+        for i, vdata in enumerate(test_loader):
+            vinputs, vlabels = vdata
+            voutputs = model(vinputs)
+            vloss = loss_fn(voutputs, vlabels)
+            running_vloss += vloss
+
+    avg_vloss = running_vloss / (i + 1)
+    print(f"Test loss: {avg_vloss:.4f}")
+
+    # Log the running loss averaged per batch
+    # for both training and validation
+    writer.add_scalars('Training vs. Validation Loss',
+                    {'Validation' : avg_vloss },
+                    epoch + 1)
+    writer.flush()
+
+    # # Track best performance, and save the model's state
+    # if avg_vloss < best_vloss:
+    #     best_vloss = avg_vloss
+    #     # model_path = 'model_{}_{}'.format(timestamp, epoch)
+    #     # torch.save(model.state_dict(), model_path)
+    
+    return avg_vloss
+
 print(f"\nFinished training, Loss: {total_loss:.4f}")
