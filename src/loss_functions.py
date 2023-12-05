@@ -45,6 +45,7 @@ class PeripheralFovealVisionModelLoss:
         self.foveation_loss = FoveationLoss((224,224))
         self.iou_weight = 1.0
         self.foveation_weight = 1.0
+        self.scale_weight = 0.0  # Disabled by default
 
     def __call__(self, curr_bbox, next_fixation, true_curr_bbox, true_next_bbox):
         """
@@ -54,7 +55,13 @@ class PeripheralFovealVisionModelLoss:
         """
         loss_iou = self.iou_loss(curr_bbox, true_curr_bbox)
         loss_foveation = self.foveation_loss(next_fixation, true_next_bbox)
-        return self.iou_weight*loss_iou + self.foveation_weight*loss_foveation
+        # Experimental: penalize scale of bounding box so it doesn't get too big.
+        # Boxes should be normalized to [0,1], so penalize anything outside of that range
+        # Doesn't seem gradient-friendly...
+        # loss_scale = torch.abs(curr_bbox - torch.clamp(curr_bbox,0.0,1.0)).sum(dim=1).sum(dim=0)
+        # loss_scale = torch.abs(curr_bbox).sum(dim=1).sum(dim=0)  # Just penalize the size of the box?
+        loss_scale = torch.abs(curr_bbox - true_curr_bbox).sum() # Penalize distance of each corner for the ground truth box
+        return self.scale_weight*loss_scale + self.iou_weight*loss_iou + self.foveation_weight*loss_foveation
 
 
 if __name__ == "__main__": 
