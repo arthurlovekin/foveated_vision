@@ -81,21 +81,16 @@ class PeripheralFovealVisionModelLoss:
         """
         loss_iou = self.iou_loss(curr_bbox, true_curr_bbox)
 
-        # TODO: Just output 4 points directly from the model
-        fixation_widths_heights = torch.ones_like(curr_bbox[...,2:4])*0.25
-        fixation_bbox = torch.cat([next_fixation, fixation_widths_heights], dim=-1)
-        fovea_corner_parametrization = center_width_to_corners(fixation_bbox)
+        if next_fixation.shape[-1] != 4:
+            fixation_widths_heights = torch.ones_like(curr_bbox[...,2:4])*0.25
+            fixation_bbox = torch.cat([next_fixation[...,0:2], fixation_widths_heights], dim=-1)
+            fovea_corner_parametrization = center_width_to_corners(fixation_bbox)
+        else:
+            fovea_corner_parametrization = next_fixation
         loss_foveation = self.iou_loss(fovea_corner_parametrization, true_next_bbox)
         
         # loss_foveation = self.foveation_loss(next_fixation, true_next_bbox)
-        return loss_iou + loss_foveation
-        # Experimental: penalize scale of bounding box so it doesn't get too big.
-        # Boxes should be normalized to [0,1], so penalize anything outside of that range
-        # Doesn't seem gradient-friendly...
-        # loss_scale = torch.abs(curr_bbox - torch.clamp(curr_bbox,0.0,1.0)).sum(dim=1).sum(dim=0)
-        # loss_scale = torch.abs(curr_bbox).sum(dim=1).sum(dim=0)  # Just penalize the size of the box?
-        # loss_scale = torch.abs(curr_bbox - true_curr_bbox).sum() # Penalize distance of each corner for the ground truth box
-        # return self.scale_weight*loss_scale + self.iou_weight*loss_iou + self.foveation_weight*loss_foveation
+        return self.iou_weight*loss_iou + self.foveation_weight*loss_foveation
 
 
 if __name__ == "__main__": 
