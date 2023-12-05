@@ -67,6 +67,10 @@ for epoch in range(num_epochs):
         optimizer.zero_grad(set_to_none=True)
         model.zero_grad(set_to_none=True)
 
+        # Need to detach then reattach the hidden variables of the model 
+        model.buffer = None 
+        model.current_fixation = None
+
         # Move to GPU
         seq_inputs = seq_inputs.to(device)
         seq_labels = seq_labels.to(device)
