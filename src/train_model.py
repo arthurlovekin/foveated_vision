@@ -1,5 +1,6 @@
 # From https://moiseevigor.github.io/software/2022/12/18/one-pager-training-resnet-on-imagenet/
 # Simple example training ResNet on MNIST just as a proof of concept test for training.
+from datetime import datetime
 import torch
 import torchvision
 from torch.utils.tensorboard import SummaryWriter
@@ -73,7 +74,8 @@ def test(model, test_loader, loss_fn, step=0):
         # Set up the progress bar
         logging.info(f"Evaluating on test set...")
         progress_bar = tqdm(test_loader, desc=f"Test set progress", position=0, leave=True)
-        for i, vdata in progress_bar:
+        # TODO(alovekin): the loss requires the next bounding box, so this loop needs to look like the training loop does
+        for i, vdata in enumerate(progress_bar):
             vinputs, vlabels = vdata
             voutputs = model(vinputs)
             vloss = loss_fn(voutputs, vlabels)
@@ -213,7 +215,8 @@ for epoch in tqdm(range(num_epochs)):
 
         # Save model checkpoint
         if save_model and step % save_frequency == 0:
-            model_path = os.path.join(model_dir, f"model_checkpoint_epoch_{epoch+1}_step_{step}.pth")
+            date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+            model_path = os.path.join(model_dir, f"model_epoch_{epoch+1}_step_{step}_{date_str}.pth")
             torch.save(model.state_dict(), model_path)
             # Evaluate on Test set
             # test_loss = test(model, test_loader, foveation_loss, step)
