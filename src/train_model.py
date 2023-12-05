@@ -177,9 +177,14 @@ def test(model, test_loader, loss_fn, step=0):
             # Create a grid of images with bounding boxes
             # For now, just show the first clip in the batch
             logging.info(f"Test loop: first estimated bbox: {bboxes[0]}")
-            bbox_grid = make_bbox_grid(images, bboxes)
-            writer.add_image('images/test', bbox_grid, step)
-            logging.info(f"Wrote image grid to tensorboard at step {step}")
+            try:
+                bbox_grid = make_bbox_grid(images, bboxes)
+                writer.add_image('images/test', bbox_grid, step)
+                logging.info(f"Wrote image grid to tensorboard at step {step}")
+            except Exception as e:
+                # This can happen if the bounding boxes are so far off tensorboard
+                # doesn't recognize them as the valid format.
+                logging.error(f"Error creating image grid: {e}")
             writer.flush()  # Necessary, otherwise tensorboard doesn't update
             break  # Just do one batch for now, otherwise it'd take forever?
     avg_vloss = running_vloss / total_samples  # Divide by total number of frames sampled across all batches
