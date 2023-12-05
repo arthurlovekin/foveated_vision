@@ -28,4 +28,4 @@ Make sure you have activated the environment first with `source setup.sh`.
 
 To train the model, run `python3 src/train_model.py`. 
 
-Start a Tensorboard server to view results (see above). Model will periodically save checkpoints and run on the test set.
+Start a Tensorboard server to view results (see above). Model will periodically save checkpoints in the `models/` directory and run on the test set.
