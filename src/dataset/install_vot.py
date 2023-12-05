@@ -1,7 +1,10 @@
 import json
 import os
-import wget,tarfile,zipfile
- 
+import tarfile
+import zipfile
+
+import wget
+
 vot_2019_path = '/scratch/eecs542s001f23_class_root/eecs542s001f23_class/shared_data/foveated_vision/data'      # object file
 json_path = '/scratch/eecs542s001f23_class_root/eecs542s001f23_class/shared_data/foveated_vision/json'  # vot 2019 json file
 anno_vot = 'vot2019'                           # vot2019 or vot2018 or vot2017

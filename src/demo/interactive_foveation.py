@@ -2,10 +2,12 @@
 pygame renderer for different foveation techniques
 """
 
-import pygame
 import sys
-from foveation import *
+
 import numpy as np
+import pygame
+from foveation import *
+
 
 def main():
     # Initialize Pygame

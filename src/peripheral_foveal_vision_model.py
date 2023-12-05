@@ -1,11 +1,14 @@
+import logging
+import math
+
 import torch
 from torch import nn
-from torchvision.models import resnet50, ResNet50_Weights
-from foveation_module import FoveationModule
-from torchvision.transforms import Resize
 from torchinfo import summary
-import math
-import logging
+from torchvision.models import ResNet50_Weights, resnet50
+from torchvision.transforms import Resize
+
+from foveation_module import FoveationModule
+
 # from typing import Tensor
 
 RESNET_DEFAULT_INPUT_SIZE = (224, 224)
@@ -84,7 +87,7 @@ class CombinerModel(nn.Module):
     """
 
     def __init__(self, buffer_size=3, n_inputs: int=4098, n_heads: int=6,
-                 n_encoder_layers: int=3, dropout: float = 0.1):
+                 n_encoder_layers: int=3, dropout: float = 0.1, fixation_length=2):
         """
         Args:
             buffer_size (int): Number of previous frames to consider
@@ -95,17 +98,20 @@ class CombinerModel(nn.Module):
         """
         super().__init__()
         self.positional_encoding = PositionalEncoding(n_inputs,dropout)
-        # self.transformer_model = nn.Transformer(
-        #     nhead=n_heads, num_encoder_layers=n_encoder_layers, num_decoder_layers=0
-        # )
         self.transformer_encoder_layer = nn.TransformerEncoderLayer(d_model=n_inputs, nhead=n_heads, dim_feedforward=2048, dropout=dropout, batch_first=True)
         self.transformer_model = nn.TransformerEncoder(encoder_layer=self.transformer_encoder_layer, num_layers=n_encoder_layers) # (contains multiple TransformerEncoderLayers)
         # Map the encoded sequence to a bounding box.
-        # This really shouldn't be done like this; we should use a decoder,
-        # and the output should be a sequence of bounding boxes (with a loss on each one).
+        # TODO: This could use a more advanced decoder
         self.sequence_dim = buffer_size*n_inputs
-        self.bbox_head = nn.Linear(self.sequence_dim, 4)  
-        self.pos_head = nn.Linear(4, 2)  
+        self.bbox_head = nn.Sequential(
+            nn.Linear(self.sequence_dim, 4),
+            nn.Sigmoid(), # make outputs 0-1
+        )
+        self.pos_head = nn.Sequential(
+            nn.Linear(self.sequence_dim, fixation_length),
+            nn.Sigmoid(), # make outputs 0-1
+        )
+        self.min_bbox_width = 0.01
 
     def forward(self, all_features_buffer):
         # Transformer expects input of shape (batch, seq_len, feature_len)
@@ -117,7 +123,12 @@ class CombinerModel(nn.Module):
         # Flatten the sequence
         latent_seq = latent_seq.reshape((latent_seq.shape[0], -1))
         bbox = self.bbox_head(latent_seq)
-        pos = self.pos_head(bbox)
+        pos = self.pos_head(latent_seq)
+
+        # Hack: to prevent the fovea from shrinking to nothing, add the minimum width to one corner 
+        # (will shift range to 0.01-1.01, but that's fine)
+        bbox[..., 2:4] += self.min_bbox_width
+
         return bbox, pos 
 
 class CombinerModelTimeSeriesTransformer(nn.Module):
@@ -147,15 +158,16 @@ class PeripheralFovealVisionModel(nn.Module):
             (self.peripheral_resolution[0], self.peripheral_resolution[1]),
             antialias=True,
         )
-        self.foveation_module = FoveationModule()
+        # self.feature_len = 2x2048 (resnet output) + 2 for center of fixation 
+        # TODO: Just output 4 points (centerx/y, dimensionsx/y) directly for the next fixation instead of 2
+        self.fixation_length = 2
+        self.buffer_len = 3
+        self.foveation_module = FoveationModule(bound_crops=False)
         self.peripheral_model = PeripheralModel()
         self.foveal_model = FovealModel()
-        self.combiner_model = CombinerModel()
+        self.combiner_model = CombinerModel(fixation_length=self.fixation_length)
         self.position_encoding = None
-        self.fixation_length = 2
         self.current_fixation = None 
-        # self.feature_len = 2x2048 (resnet output) + 2 for center of fixation 
-        self.buffer_len = 3
         self.buffer = None 
     
     def reset(self):
@@ -164,6 +176,9 @@ class PeripheralFovealVisionModel(nn.Module):
         # (Setting to none causes them to be reinitialized)
         self.current_fixation = None 
         self.buffer = None
+
+    def get_default_fovea_size(self):
+        return self.foveation_module.crop_width,self.foveation_module.crop_height
 
     def forward(self, current_image):
         """
@@ -203,6 +218,7 @@ class PeripheralFovealVisionModel(nn.Module):
         logging.debug(f"Buffer shape: {self.buffer.shape}")
 
         bbox, next_fixation = self.combiner_model(self.buffer)
+        # TODO: Is detach necessary vvv?
         self.current_fixation = next_fixation.detach()
         return bbox, next_fixation 
 

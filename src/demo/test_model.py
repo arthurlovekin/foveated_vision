@@ -1,6 +1,6 @@
 # https://pytorch.org/vision/stable/models.html
 from torchvision.io import read_image
-from torchvision.models import resnet50, ResNet50_Weights
+from torchvision.models import ResNet50_Weights, resnet50
 
 # from pathlib import Path
 # img_filepath = Path("src/demo/abbeyroad.jpg")

@@ -1,17 +1,23 @@
 # From https://moiseevigor.github.io/software/2022/12/18/one-pager-training-resnet-on-imagenet/
 # Simple example training ResNet on MNIST just as a proof of concept test for training.
 from datetime import datetime
+
 import torch
 import torchvision
+
 torchvision.disable_beta_transforms_warning()
+import logging
+
 import torchvision.transforms.functional as TF
 from torch.utils.tensorboard import SummaryWriter
-from dataset.vot_dataset import *
-from dataset.got10k_dataset import *
-from peripheral_foveal_vision_model import PeripheralFovealVisionModel
-from loss_functions import PeripheralFovealVisionModelLoss, IntersectionOverUnionLoss
 from tqdm import tqdm
-import logging
+
+from dataset.got10k_dataset import *
+from dataset.vot_dataset import *
+from loss_functions import (IntersectionOverUnionLoss,
+                            PeripheralFovealVisionModelLoss)
+from peripheral_foveal_vision_model import PeripheralFovealVisionModel
+from utils import bbox_to_img_coords, make_bbox_grid
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)  # Change this to INFO or WARNING to reduce verbosity, or DEBUG for max spam
@@ -44,13 +50,15 @@ test_loader = get_dataloader(batch_size=batch_size_test, targ_size=(224, 224), c
 # Load the model
 model = PeripheralFovealVisionModel()
 
+default_fovea_shape = model.get_default_fovea_size()
+
 # Parallelize training across multiple GPUs
 # model = torch.nn.DataParallel(model)
 
 # Set the model to run on the device
 model = model.to(device)
 
-foveation_loss = PeripheralFovealVisionModelLoss()
+foveation_loss = PeripheralFovealVisionModelLoss(default_fovea_shape=default_fovea_shape)
 foveation_loss.foveation_weight = 0.0  # TODO: Remove this, just for testing
 ce_loss = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -98,45 +106,7 @@ class SequenceIterator:
 
     def __len__(self):
         return self.num_frames
-
-def bbox_to_img_coords(bbox, image):
-    """ Convert a bounding box from [0, 1] range to image coordinates
-    Also ensure that the bounding box is within the image bounds and
-    clip if necessary.
-    Args:
-        bbox (torch.tensor): (batch, 4) bounding box
-        image (torch.tensor): (channels, height, width) image
-    """
-    # Convert each corner and clip to image bounds
-    bbox[:, 0] = torch.clamp(bbox[:, 0] * image.shape[2], min=0, max=image.shape[2])
-    bbox[:, 1] = torch.clamp(bbox[:, 1] * image.shape[1], min=0, max=image.shape[1])
-    bbox[:, 2] = torch.clamp(bbox[:, 2] * image.shape[2], min=0, max=image.shape[2])
-    bbox[:, 3] = torch.clamp(bbox[:, 3] * image.shape[1], min=0, max=image.shape[1])
-    return bbox
-
-def make_bbox_grid(images, bboxes):
-    """ 
-    Create a grid of images with bounding boxes
-    Args:
-        images (list): List of images, each of shape (batch, channels, height, width)
-        bboxes (list): List of bounding boxes, each of shape (batch, 4)
-    """
-    # For now, just show the first clip in the batch
-    batch_ind = 0
-    bbox_list = []
-    decimate_frequency = 5  # Only show every Nth frame to save space
-    for i in range(len(images)):
-        if i % decimate_frequency != 0:
-            continue
-        image = TF.convert_image_dtype(images[i][batch_ind, :, :, :], dtype=torch.uint8)
-        # Requires a dimension to possibly display multiple bounding boxes
-        bbox = bboxes[i][batch_ind, :].unsqueeze(0)
-        # Convert bounding boxes from [0, 1] range to image coordinates
-        bbox = bbox_to_img_coords(bbox, image) # Also clips to image dimensions
-        bbox_list.append(torchvision.utils.draw_bounding_boxes(image, bbox, colors=["green"], width=5))
-    bbox_grid = torchvision.utils.make_grid(bbox_list)
-    return bbox_grid
-
+    
 def test(model, test_loader, loss_fn, step=0):
     # Evaluate on Test set https://pytorch.org/tutorials/beginner/introyt/trainingyt.html
     running_vloss = 0.0

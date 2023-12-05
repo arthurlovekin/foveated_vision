@@ -1,9 +1,9 @@
 """
 Methods for sampling points from an image tensor
 """
-import torch 
-from torch import nn
+import torch
 import torchvision.transforms.functional as TF
+from torch import nn
 from torchvision.transforms import Resize
 
 
@@ -11,7 +11,7 @@ class FoveationModule(nn.Module):
     """
     Given an image tensor and a fixation point, sample points and return the high-resolution foveal patch 
     """
-    def __init__(self, crop_width=0.25, crop_height=0.25, out_width_px=224, out_height_px=224, n_fixations=1):
+    def __init__(self, crop_width=0.25, crop_height=0.25, out_width_px=224, out_height_px=224, n_fixations=1, bound_crops=True):
         """
         Args:
             center: (fraction_x, fraction_y) where fraction_x and fraction_y are floats between 0 and 1
@@ -25,6 +25,7 @@ class FoveationModule(nn.Module):
         self.crop_width = crop_width
         self.crop_height = crop_height
         self.n_fixations = n_fixations
+        self.bound_crops= bound_crops
         self.resize = Resize((out_width_px, out_height_px), antialias=True)
 
     def forward(self,fixation,image, shape=None): 
@@ -54,12 +55,16 @@ class FoveationModule(nn.Module):
         # Make sure widths and heights are on the right device
         widths = widths.to(image.device)
         heights = heights.to(image.device)
-        # make sure we don't crop past border 
-        left_vec_term = torch.max(torch.zeros_like(fixation[...,0]),fixation[...,0]*image_xshape - widths // 2)
-        left_vec = torch.min(left_vec_term, image_xshape - widths)
-        top_vec_term = torch.max(torch.zeros_like(fixation[...,1]),fixation[...,1]*image_yshape - heights // 2) 
-        top_vec = torch.min(top_vec_term, image_yshape - heights)
-        
+        if self.bound_crops: 
+            # make sure we don't crop past border 
+            left_vec_term = torch.max(torch.zeros_like(fixation[...,0]),fixation[...,0]*image_xshape - widths // 2)
+            left_vec = torch.min(left_vec_term, image_xshape - widths)
+
+            top_vec_term = torch.max(torch.zeros_like(fixation[...,1]),fixation[...,1]*image_yshape - heights // 2) 
+            top_vec = torch.min(top_vec_term, image_yshape - heights)
+        else: 
+            left_vec = fixation[...,0]*image_xshape - widths // 2
+            top_vec = fixation[...,1]*image_yshape - heights // 2
         # Slice so we don't lose the batch dimension, but can apply a different crop to each image in the batch
         cropped =  torch.cat([TF.crop(image[i:i+1], int(top), int(left), int(width), int(height))
                               for i,(top,left,width,height) in enumerate(zip(list(left_vec), list(top_vec),list(widths),list(heights)))],dim=0)
@@ -75,9 +80,18 @@ class NeuralFoveationModule(nn.Module):
     Takes the output attentions of the transformer and uses them to generate a sample foveation patch
     """
 
-    def __init__(self):
+    def __init__(self,**kwargs):
         super().__init__()
-        self.foveation_module = FoveationModule(crop_width=0.25, crop_height=0.25, out_width_px=224, out_height_px=224, n_fixations=1)
+        default_kwargs = {
+            'crop_width':0.25, 
+            'crop_height':0.25, 
+            'out_width_px':224, 
+            'out_height_px':224, 
+            'n_fixations':1, 
+            'bound_crops':False
+        }
+        default_kwargs.update(kwargs)
+        self.foveation_module = FoveationModule(default_kwargs)
         # TODO: Make the parameters of this model dynamic and also make the architecture better if necessary
         self.transformer_attentions_len = 2048
         self.fixation_model = nn.Sequential(

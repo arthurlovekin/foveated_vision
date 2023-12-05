@@ -1,10 +1,12 @@
 # From https://moiseevigor.github.io/software/2022/12/18/one-pager-training-resnet-on-imagenet/
 # Simple example training ResNet on MNIST just as a proof of concept test for training.
+import os
+
 import torch
 import torchvision
 import torchvision.transforms as transforms
 from torch.utils.tensorboard import SummaryWriter
-import os
+
 
 def grayscale_to_rgb(tensor):
   # Utility to let us use ResNet on grayscale images
