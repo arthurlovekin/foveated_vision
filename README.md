@@ -19,7 +19,7 @@ If the Python extension is installed, VSCode will offer some built-in Tensorboar
 However, even without the plugin you can view the board in a VSCode tab (since VSCode is a web browser). When you start the board, just click "Preview in editor" on the pop-up that comes up.
 
 ## Training on Great Lakes
-Go to (Great Lakes)[https://greatlakes.arc-ts.umich.edu/]. Request a standard GPU Basic Desktop instance with maximum RAM and cores, and one GPU. 
+Go to (Great Lakes)[https://greatlakes.arc-ts.umich.edu/]. Go to "My Interactive Sessions" and Request a standard desktop instance with GPU, maximum RAM and cores, and one GPU. 
 It may take a few minutes to provision. 
 
 Start the VNC viewer (recommended) or SSH (not supported). 
