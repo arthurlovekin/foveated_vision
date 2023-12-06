@@ -225,6 +225,7 @@ for epoch in range(num_epochs):
             logging.debug(f"Current estimated bbox: {curr_bbox}")
             logging.debug(f"Currrent true bbox: {curr_labels}")
             logging.debug(f"Next fixation: {next_fixation}")
+            logging.debug(f"Next true bbox: {next_labels}")
             loss = foveation_loss(curr_bbox, next_fixation, curr_labels, next_labels)
             loss = loss
 
