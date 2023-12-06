@@ -32,6 +32,8 @@ class PeripheralModel(nn.Module):
         # self.pretrined_new = torch.nn.Sequential(*list(self.pretrained.children())[:-1])
         # for param in self.pretrained[-1].parameters():
         #     param.requires_grad = False
+        
+        # normalization parameters used by pretrained model
         self.resize = Resize(size=232,antialias=True)
         self.crop = CenterCrop(size=224)
         self.norm = Normalize( mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -61,9 +63,18 @@ class FovealModel(nn.Module):
         else:
             logging.error("No fc layer found in pretrained model")
 
+        # normalization parameters used by pretrained model
+        self.resize = Resize(size=232,antialias=True)
+        self.crop = CenterCrop(size=224)
+        self.norm = Normalize( mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
     def forward(self, foveal_patch):
+        normalized = self.transform(foveal_patch)
         # output: (batch, 2048) feature vector
-        return self.pretrained(foveal_patch)
+        return self.pretrained(normalized)
+
+    def transform(self,image_tensor):
+        return self.norm(self.crop(self.resize(image_tensor)))
 
 
 # https://pytorch.org/tutorials/beginner/transformer_tutorial.html
@@ -220,8 +231,6 @@ class PeripheralFovealVisionModel(nn.Module):
 
         # Extract features from the peripheral image
         peripheral_feature = self.peripheral_model(current_image)
-        # background_img = self.downsampler(current_image)
-        # peripheral_feature = self.peripheral_model(background_img)
         logging.debug(f"Peripheral feature shape: {peripheral_feature.shape}")
 
         # Extract features from the foveal patch
