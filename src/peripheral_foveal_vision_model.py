@@ -220,9 +220,11 @@ class PeripheralFovealVisionModel(nn.Module):
         logging.debug(f"Peripheral feature shape: {peripheral_feature.shape}")
 
         # Extract features from the foveal patch
-        foveal_patch = self.foveation_module(self.current_fixation, current_image)
-        logging.debug(f"Foveal patch shape: {foveal_patch.shape}")
+        # ROMOVED FOVEATION
+        # foveal_patch = self.foveation_module(self.current_fixation, current_image)
+        foveal_patch = current_image
         foveal_feature = self.foveal_model(foveal_patch)
+        logging.debug(f"Foveal patch shape: {foveal_patch.shape}")
         logging.debug(f"Foveal feature shape: {foveal_feature.shape}")
         logging.debug(f"Current fixation shape: {self.current_fixation.shape}")
 
