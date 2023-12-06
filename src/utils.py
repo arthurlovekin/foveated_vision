@@ -32,15 +32,10 @@ def bbox_to_img_coords(bbox, image):
         image (torch.tensor): (channels, height, width) image
     """
     # Convert each corner and clip to image bounds
-    print('pre')
-    print(bbox)
-    bbox = torch.stack(
-        [torch.clamp(bbox[:, 0] * image.shape[-2], min=0, max=image.shape[-2]),
-         torch.clamp(bbox[:, 1] * image.shape[-2], min=0, max=image.shape[-2]),
-         torch.clamp(bbox[:, 2] * image.shape[-1], min=0, max=image.shape[-1]),
-         torch.clamp(bbox[:, 3] * image.shape[-1], min=0, max=image.shape[-1])
-        ],axis=1) 
-    print(bbox)
+    bbox[:, 0] = torch.clamp(bbox[:, 0] * image.shape[2], min=0, max=image.shape[2])
+    bbox[:, 1] = torch.clamp(bbox[:, 1] * image.shape[1], min=0, max=image.shape[1])
+    bbox[:, 2] = torch.clamp(bbox[:, 2] * image.shape[2], min=0, max=image.shape[2])
+    bbox[:, 3] = torch.clamp(bbox[:, 3] * image.shape[1], min=0, max=image.shape[1])    
     return bbox
 
 def make_bbox_grid(images, bboxes, gt_bboxes=[], decimation=5):
@@ -108,7 +103,7 @@ def fix_fovea_if_needed(fixations,default_shape):
     else: 
         return fixations
 
-def cwh_perc_to_pixel_xyxy(bbox,image_shape,default_fovea_shape=[0.25,0.25]): 
+def cwh_perc_to_pixel_xyxy(bbox,image_shape,default_fovea_shape=[0.25,0.25]):
         bbox = fix_fovea_if_needed(bbox,default_shape=default_fovea_shape)
         bbox = center_width_to_corners(bbox)
         # print(bbox)
@@ -118,12 +113,10 @@ def cwh_perc_to_pixel_xyxy(bbox,image_shape,default_fovea_shape=[0.25,0.25]):
         return bbox[:,torch.tensor([0,2,1,3])].int()
 
 def xxyy_perc_to_pixel_xyxy(bbox,image_shape): 
-        print(bbox[0:4])
-        # print(bbox)
         bbox[...,0:2] = torch.clamp(bbox[...,0:2] * image_shape[-2], 0, image_shape[-2])
         bbox[...,2:4] = torch.clamp(bbox[...,2:4] * image_shape[-1], 0, image_shape[-1])
 
-        return bbox[:,torch.tensor([0,2,1,3])].int()
+        return bbox #[:,torch.tensor([0,2,1,3])].int()
 
 def draw_bboxes(images,bboxes:list[torch.tensor],names:list=None,norm_by:list[str]=None,default_fovea_shape=[0.25,0.25]):
     out_imgs = []
@@ -136,13 +129,9 @@ def draw_bboxes(images,bboxes:list[torch.tensor],names:list=None,norm_by:list[st
         elif type(norm) is str and norm == 'xyxy': 
             bboxes[i] = xxyy_perc_to_pixel_xyxy(bbox,images.shape)
         elif norm is not  None: 
-            bbox = norm(bbox)
+            bboxes[i] = norm(bbox)
         
-        print(bboxes[i][0:4])
-        print(torch.all(torch.logical_and(bboxes[i][...,0] < bboxes[i][...,2],  bboxes[i][...,1] < bboxes[i][...,3])))
-        # print(bbox)
     for imagenum in range(images.shape[0]):
-        # print(images)
         out_imgs.append(torchvision.utils.draw_bounding_boxes(
                 images[imagenum,...], 
                 boxes=torch.stack([b[imagenum,...] for b in bboxes]), 
