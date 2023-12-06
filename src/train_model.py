@@ -52,12 +52,12 @@ random_seed = 1
 torch.backends.cudnn.enabled = False
 torch.manual_seed(random_seed)
 
-train_loader = get_dataloader(
-    batch_size=batch_size_train, targ_size=(224, 224), clip_length_s=clip_length_s_train
-)
-test_loader = get_dataloader(
-    batch_size=batch_size_test, targ_size=(224, 224), clip_length_s=clip_length_s_test
-)
+# train_loader = get_dataloader(
+#     batch_size=batch_size_train, targ_size=(224, 224), clip_length_s=clip_length_s_train,
+# )
+# test_loader = get_dataloader(
+#     batch_size=batch_size_test, targ_size=(224, 224), clip_length_s=clip_length_s_test)
+train_loader, test_loader = get_train_test_dataloaders(batch_size=batch_size_train,targ_size=(224, 224),clip_length_s=clip_length_s_train)
 
 # Load the model
 model = PeripheralFovealVisionModel()
@@ -203,6 +203,7 @@ def test(model, test_loader, loss_fn, step=0):
 
 
 best_test_loss = float("inf")
+step = 0
 for epoch in range(num_epochs):
     logging.info(f"Starting epoch {epoch+1}/{num_epochs}")
     epoch_progress_bar = None
@@ -210,7 +211,6 @@ for epoch in range(num_epochs):
         epoch_progress_bar = tqdm(
             train_loader, desc=f"Epoch {epoch+1}/{num_epochs}", position=0, leave=True
         )  # Update position of other bars if using.
-    step = 0
     for seq_inputs, seq_labels in train_loader:
         total_loss = 0.0
         total_samples = 0
@@ -304,7 +304,7 @@ for epoch in range(num_epochs):
                 # Save model checkpoint
                 date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
                 model_path = os.path.join(
-                    model_dir, f"{date_str}_model_epoch_{epoch+1}_step_{step}_loss_{best_test_loss}.pth"
+                    model_dir, f"{date_str}_model_epoch_{epoch+1}_step_{step}_{best_test_loss:.6f}.pth"
                 )
                 torch.save(model.state_dict(), model_path)
             model.train()  # Set back to train mode
