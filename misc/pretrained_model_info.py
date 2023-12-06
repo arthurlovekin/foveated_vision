@@ -1,10 +1,10 @@
 import torch
 from torch import nn
 from torchvision.models import resnet50, ResNet50_Weights
+from torchvision.models.detection import ssdlite320_mobilenet_v3_large, SSDLite320_MobileNet_V3_Large_Weights
 from torchvision.transforms import Resize
 from torchinfo import summary
 # from peripheral_foveal_vision_model import PeripheralModel, FovealModel, CombinerModel
-from transformers import TimeSeriesTransformerConfig, TimeSeriesTransformerModel
 """
 the thing is that transformers expect to generate a sequence of the same type (eg. bounding boxes))
 However in our implementation we are taking in features from the peripheral and foveal images, plus the previous fixation (or bounding box)
@@ -13,31 +13,42 @@ We could make the transformer predict both the next image features and the next 
 and then have a loss between the transformer's predicted features and the actual next features in addition to the loss on the bounding box itself.
 
 """
-# Initializing a Time Series Transformer configuration with 12 time steps for prediction
-prediction_length = 1
-context_length = 16
-configuration = TimeSeriesTransformerConfig(prediction_length=12)
 
-# Randomly initializing a model (with random weights) from the configuration
-model = TimeSeriesTransformerModel(configuration)
+model = ssdlite320_mobilenet_v3_large(weights=SSDLite320_MobileNet_V3_Large_Weights.DEFAULT)
 
-# # Accessing the model configuration
-# configuration = model.config
-
-
-# # weights = ResNet50_Weights.IMAGENET1K_V2
-# # model = resnet50(weights=weights)
-# model = PeripheralModel()
-# print(model)
+# weights = ResNet50_Weights.IMAGENET1K_V2
+# model = resnet50(weights=weights)
 print(summary(model))
+print(model)
+# model.eval()
+# test_input = torch.randn(2, 3, 420,420) # (batch, channels, height, width)
+# output = model(test_input)
+# print(f"Output is a list of length batch_size: {len(output)}") 
+# print(f"Each list element is a dict with fields {output[0].keys()}") #['boxes', 'scores', 'labels']
+# print(f"boxes: {output[0]['boxes']}")
+# print(f"labels: {output[0]['labels']}")
 
-test_input = torch.randn(3, 3, 420,420) # (batch, channels, height, width)
-
-past_time_features = torch.randn(3, 2048*2+4, 12) # (batch, channels, time_steps)
-print(model(test_input).shape)
-
-
-
+# ssdlite320_mobilenet_v3_large
+# Layer (type:depth-idx)                                       Param #
+# =====================================================================================
+# SSD                                                          --
+# ├─SSDLiteFeatureExtractorMobileNet: 1-1                      --
+# │    └─Sequential: 2-1                                       --
+# │    │    └─Sequential: 3-1                                  869,096
+# │    │    └─Sequential: 3-2                                  751,416
+# │    └─ModuleList: 2-2                                       --
+# │    │    └─Sequential: 3-3                                  258,304
+# │    │    └─Sequential: 3-4                                  100,480
+# │    │    └─Sequential: 3-5                                  67,712
+# │    │    └─Sequential: 3-6                                  25,664
+# ├─DefaultBoxGenerator: 1-2                                   --
+# ├─SSDLiteHead: 1-3                                           --
+# │    └─SSDLiteClassificationHead: 2-3                        --
+# │    │    └─ModuleList: 3-7                                  1,286,604
+# │    └─SSDLiteRegressionHead: 2-4                            --
+# │    │    └─ModuleList: 3-8                                  80,784
+# ├─GeneralizedRCNNTransform: 1-4                              --
+# =====================================================================================
 
 
 # def forward2(self, fixation, image, crop_width_frac=None, crop_height_frac=None):
