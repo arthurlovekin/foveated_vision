@@ -212,6 +212,8 @@ class PeripheralFovealVisionModel(nn.Module):
         logging.debug(f"Buffer shape: {self.buffer.shape}")
 
         bbox, next_fixation = self.combiner_model(self.buffer)
+        # TODO: Is detach necessary vvv?
+
         self.current_fixation = next_fixation.detach()
         return bbox, next_fixation 
 
