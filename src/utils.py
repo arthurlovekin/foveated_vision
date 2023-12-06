@@ -37,7 +37,7 @@ def bbox_to_img_coords(bbox, image):
     bbox[:, 3] = torch.clamp(bbox[:, 3] * image.shape[1], min=0, max=image.shape[1])
     return bbox
 
-def make_bbox_grid(images, bboxes):
+def make_bbox_grid(images, bboxes, decimation_factor=5):
     """ 
     Create a grid of images with bounding boxes
     Args:
@@ -48,6 +48,8 @@ def make_bbox_grid(images, bboxes):
     batch_ind = 0
     bbox_list = []
     for i in range(len(images)):
+        if i % decimation_factor != 0:
+            continue
         image = TF.convert_image_dtype(images[i][batch_ind, :, :, :], dtype=torch.uint8)
         # Requires a dimension to possibly display multiple bounding boxes
         bbox = bboxes[i][batch_ind, :].unsqueeze(0)
