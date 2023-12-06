@@ -37,23 +37,33 @@ def bbox_to_img_coords(bbox, image):
     bbox[:, 3] = torch.clamp(bbox[:, 3] * image.shape[1], min=0, max=image.shape[1])
     return bbox
 
-def make_bbox_grid(images, bboxes):
+def make_bbox_grid(images, bboxes, gt_bboxes=[], decimation=5):
     """ 
     Create a grid of images with bounding boxes
     Args:
         images (list): List of images, each of shape (batch, channels, height, width)
-        bboxes (list): List of bounding boxes, each of shape (batch, 4)
+        bboxes (list): List of bounding boxes, each of shape (batch, 4). Should be from 0 to 1
+        gt_bboxes (list): List of ground truth bounding boxes, each of shape (batch, 4). Should be from 0 to 1
+        decimation (int): Decimation factor for the images. Will only show every decimation'th image
     """
     # For now, just show the first clip in the batch
     batch_ind = 0
     bbox_list = []
     for i in range(len(images)):
+        if i % decimation != 0:
+            continue
         image = TF.convert_image_dtype(images[i][batch_ind, :, :, :], dtype=torch.uint8)
         # Requires a dimension to possibly display multiple bounding boxes
         bbox = bboxes[i][batch_ind, :].unsqueeze(0)
         # Convert bounding boxes from [0, 1] range to image coordinates
         bbox = bbox_to_img_coords(bbox, image) # Also clips to image dimensions
-        bbox_list.append(torchvision.utils.draw_bounding_boxes(image, bbox, colors=["green"], width=5))
+        if len(gt_bboxes) > 0:
+            gt_bbox = gt_bboxes[i][batch_ind, :].unsqueeze(0)
+            gt_bbox = bbox_to_img_coords(gt_bbox, image)
+            bboxes = torch.cat([bbox, gt_bbox], dim=0)
+            bbox_list.append(torchvision.utils.draw_bounding_boxes(image, bboxes, colors=["green", "red"], width=5))
+        else:
+            bbox_list.append(torchvision.utils.draw_bounding_boxes(image, bbox, colors=["green", "red"], width=5))
     bbox_grid = torchvision.utils.make_grid(bbox_list)
     return bbox_grid
 
