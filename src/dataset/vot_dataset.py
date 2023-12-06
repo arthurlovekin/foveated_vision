@@ -68,7 +68,7 @@ class VotDataset(Dataset):
         # TODO: interpolate the groundtruth labels
         # For now, just replicate the last non-Nan label
         # Last non-Nan label
-        last_non_nan = torch.tensor([0,0,0,0])
+        last_non_nan = torch.tensor([0,1.0,0,1.0])
         for i in range(groundtruth.shape[0]):
             if torch.any(torch.isnan(groundtruth[i])):
                 # Replace the NaNs with the last non-NaN value
