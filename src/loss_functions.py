@@ -5,6 +5,7 @@ import torchvision
 from torch import nn
 
 from utils import center_width_to_corners
+from utils import fix_fovea_if_needed
 
 # TODO: Could make all loss functions nn.Modules if they contain learnable parameters
 # (just swap out the __call__ for a forward method, and add (nn.Module) after the class name)
@@ -125,6 +126,8 @@ class PeripheralFovealVisionModelLoss:
 
         if self.mse_weight != 0.0:
             mse_loss = self.mse_loss(curr_bbox, true_curr_bbox)
+            # Get MSE loss on the next fixation as well
+            mse_loss += self.mse_loss(fix_fovea_if_needed(next_fixation, [0.25, 0.25]), true_next_bbox)
         else:
             mse_loss = 0.0
 
