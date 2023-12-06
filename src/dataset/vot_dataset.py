@@ -1,6 +1,5 @@
 import logging
 from os import path as Path
-
 import random
 import torch
 import time
@@ -187,9 +186,13 @@ def get_train_test_dataloaders(test_split=0.2,targ_size = None,batch_size=3, cli
     test_ds = NonNullVotDataset(targ_size=targ_size, clip_secs=clip_length_s,filter_set = test_names)
     logging.info(f'train has {len(train_ds)} samples; test has {len(test_ds)} samples')
 
+    # TODO: Is get_dataloader deprecated or can we use it here?
+    # get the train dataloader
     if 'generator' not in loader_kwargs: 
         loader_kwargs['generator'] = gen
     train_dl = DataLoader(train_ds,batch_size=batch_size,shuffle=shuffle,**loader_kwargs,collate_fn=None)
+    
+    # get the test dataloader
     if 'generator' not in loader_kwargs: 
         gen = torch.Generator()
         gen.manual_seed(seed)

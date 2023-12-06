@@ -1,10 +1,10 @@
 import torch
 from torch import nn
 from torchvision.models import resnet50, ResNet50_Weights
-from torchvision.transforms import Resize
+from torchvision.transforms import Resize, CenterCrop, Normalize, Compose
 from torchinfo import summary
+import torchvision.transforms
 # from peripheral_foveal_vision_model import PeripheralModel, FovealModel, CombinerModel
-from transformers import TimeSeriesTransformerConfig, TimeSeriesTransformerModel
 """
 the thing is that transformers expect to generate a sequence of the same type (eg. bounding boxes))
 However in our implementation we are taking in features from the peripheral and foveal images, plus the previous fixation (or bounding box)
@@ -13,29 +13,43 @@ We could make the transformer predict both the next image features and the next 
 and then have a loss between the transformer's predicted features and the actual next features in addition to the loss on the bounding box itself.
 
 """
-# Initializing a Time Series Transformer configuration with 12 time steps for prediction
-prediction_length = 1
-context_length = 16
-configuration = TimeSeriesTransformerConfig(prediction_length=12)
 
-# Randomly initializing a model (with random weights) from the configuration
-model = TimeSeriesTransformerModel(configuration)
-
-# # Accessing the model configuration
-# configuration = model.config
-
-
-# # weights = ResNet50_Weights.IMAGENET1K_V2
-# # model = resnet50(weights=weights)
-# model = PeripheralModel()
+weights = ResNet50_Weights.IMAGENET1K_V2
+model = resnet50(weights=weights)
 # print(model)
-print(summary(model))
+# print(summary(model))
 
 test_input = torch.randn(3, 3, 420,420) # (batch, channels, height, width)
 
-past_time_features = torch.randn(3, 2048*2+4, 12) # (batch, channels, time_steps)
 print(model(test_input).shape)
 
+# get transforms that match the way the pretrained resnets were trained
+resnet50_transforms = weights.transforms
+print(f'Resnet50 transforms: {resnet50_transforms}')
+
+# Get the default transforms for the ResNet model
+transforms_list = Compose([
+            Resize(232),
+            CenterCrop(224),
+            Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+print("Default Transforms:")
+print(transforms_list)
+print("\nNormalization Mean:", transforms_list.transforms[-1].mean)
+print("Normalization Standard Deviation:", transforms_list.transforms[-1].std)
+
+test_image = torch.randn(3,3,420,420)
+
+def resnet50_transform(image_tensor):
+        resize = Resize(size=232,antialias=True)
+        crop = CenterCrop(size=224)
+        norm = Normalize( mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        return norm(crop(resize(image_tensor)))
+
+
+# print(resnet50_transforms(test_image))
+# print("=--------------")
+print(resnet50_transform(test_image).shape)
 
 
 

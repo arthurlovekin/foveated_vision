@@ -5,7 +5,7 @@ import torch
 from torch import nn
 from torchinfo import summary
 from torchvision.models import ResNet50_Weights, resnet50
-from torchvision.transforms import Resize
+from torchvision.transforms import Resize, CenterCrop, Normalize
 
 from foveation_module import FoveationModule
 
@@ -32,10 +32,18 @@ class PeripheralModel(nn.Module):
         # self.pretrined_new = torch.nn.Sequential(*list(self.pretrained.children())[:-1])
         # for param in self.pretrained[-1].parameters():
         #     param.requires_grad = False
+        self.resize = Resize(size=232,antialias=True)
+        self.crop = CenterCrop(size=224)
+        self.norm = Normalize( mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
-    def forward(self, low_res_image):
-        # output: (batch, 2048) feature vector
-        return self.pretrained(low_res_image)
+    def forward(self, full_image):
+        """ downsample and normalize the image 
+        then output features of resnet """
+        normalized = self.transform(full_image)
+        return self.pretrained(normalized)
+
+    def transform(self,image_tensor):
+        return self.norm(self.crop(self.resize(image_tensor)))
 
 
 class FovealModel(nn.Module):
@@ -168,14 +176,9 @@ class CombinerModelTimeSeriesTransformer(nn.Module):
 
 
 class PeripheralFovealVisionModel(nn.Module):
-    def __init__(self):  # , batch_size=1):
+    def __init__(self):
         super().__init__()
-        # self.batch_size = batch_size
-        self.peripheral_resolution = RESNET_DEFAULT_INPUT_SIZE
-        self.downsampler = Resize(
-            (self.peripheral_resolution[0], self.peripheral_resolution[1]),
-            antialias=True,
-        )
+
         # self.feature_len = 2x2048 (resnet output) + 2 for center of fixation
         # TODO: Just output 4 points (centerx/y, dimensionsx/y) directly for the next fixation instead of 2
         self.fixation_length = 2
@@ -216,8 +219,9 @@ class PeripheralFovealVisionModel(nn.Module):
             )
 
         # Extract features from the peripheral image
-        background_img = self.downsampler(current_image)
-        peripheral_feature = self.peripheral_model(background_img)
+        peripheral_feature = self.peripheral_model(current_image)
+        # background_img = self.downsampler(current_image)
+        # peripheral_feature = self.peripheral_model(background_img)
         logging.debug(f"Peripheral feature shape: {peripheral_feature.shape}")
 
         # Extract features from the foveal patch
