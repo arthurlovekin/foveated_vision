@@ -98,7 +98,7 @@ class VotDataset(Dataset):
 def get_dataloader(dataset_name='longterm',targ_size = None,batch_size=3, clip_length_s=5, shuffle=True, seed = None,**loader_kwargs):
     collate_fn = None
     if seed is None: 
-        seed = int(time.time())
+        seed = int(time.time()*1000)
         print(seed)
     if 'generator' not in loader_kwargs: 
         ds = VotDataset(dataset_name=dataset_name,targ_size=targ_size, clip_secs=clip_length_s)
@@ -119,10 +119,10 @@ if __name__ == "__main__":
     print(f"Labels: {key}")
 
     dl = get_dataloader(targ_size=(650,650))
-    print(dl.generator.initial_seed())
+    # print(dl.generator.initial_seed())
     time.sleep(1)
     dl2 = get_dataloader(targ_size=(650,650))
-    print(dl2.generator.initial_seed())
+    # print(dl2.generator.initial_seed())
 
     # for i,loaded in tqdm(enumerate(dl),total=len(ds)): 
         
