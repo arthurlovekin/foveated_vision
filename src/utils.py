@@ -85,9 +85,10 @@ def bbox_valid(bbox):
     """
     Check if a bounding box is valid (i.e. has a width and height > 0)
     bbox: [batch]x 4 tensor [xlow, xhigh, ylow,yhigh]
+    Assume batch dimension is 1 (just one bounding box)
     """
-    # Check that for all batch elements, xhigh > xlow and yhigh > ylow
-    all_valid = torch.all(bbox[...,0:1] < bbox[...,1:2],dim=-1) & torch.all(bbox[...,2:3] < bbox[...,3:4],dim=-1)
+    bbox = bbox[0, ...]
+    all_valid = bbox[0] < bbox[2] and bbox[1] < bbox[3]
     return all_valid
 
 def draw_bboxes(images,bboxs,fixation_bboxs=None):
