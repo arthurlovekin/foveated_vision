@@ -1,6 +1,7 @@
 from os import path as Path
 
 import torch
+import time
 import torchvision
 from torch.utils.data import DataLoader, Dataset
 from torchvision.io import read_image
@@ -83,17 +84,30 @@ class VotDataset(Dataset):
         for i in range(self.seq_len): 
             # Resize and remap colorspace to 0.0-1.0
             images[i] = self.resize(read_image(Path.join(viddir,f'color/{start_idx + i+1:08d}.jpg'))) / 255.0
+
+        groundtruth = torch.stack([
+            groundtruth[:,0], groundtruth[:,1], groundtruth[:,0] + groundtruth[:,2], groundtruth[:,1] + groundtruth[:,3]
+        ],dim=-1)
+        print(groundtruth.shape)
         return images,groundtruth
     
     def __getitem__(self,idx):
+        print(idx)
         if self.in_mem: 
             return self.video_caches
         return self.get_vid(idx)
 
 
-def get_dataloader(dataset_name='longterm',targ_size = None,batch_size=3, clip_length_s=5, shuffle=True,**loader_kwargs):
+def get_dataloader(dataset_name='longterm',targ_size = None,batch_size=3, clip_length_s=5, shuffle=True, seed = None,**loader_kwargs):
     collate_fn = None
-    ds = VotDataset(dataset_name=dataset_name,targ_size=targ_size, clip_secs=clip_length_s)
+    if seed is None: 
+        seed = int(time.time())
+        print(seed)
+    if 'generator' not in loader_kwargs: 
+        ds = VotDataset(dataset_name=dataset_name,targ_size=targ_size, clip_secs=clip_length_s)
+        gen = torch.Generator()
+        loader_kwargs['generator'] = gen
+    gen.manual_seed(seed)
     return DataLoader(ds,batch_size=batch_size,shuffle=shuffle,**loader_kwargs,collate_fn=collate_fn)
     
 if __name__ == "__main__": 
@@ -108,6 +122,10 @@ if __name__ == "__main__":
     print(f"Labels: {key}")
 
     dl = get_dataloader(targ_size=(650,650))
+    print(dl.generator.initial_seed())
+    time.sleep(1)
+    dl2 = get_dataloader(targ_size=(650,650))
+    print(dl2.generator.initial_seed())
 
     # for i,loaded in tqdm(enumerate(dl),total=len(ds)): 
         
