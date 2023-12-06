@@ -1,6 +1,7 @@
 import torch
 import torchvision
 import torchvision.transforms.functional as TF
+import logging
 
 
 def center_width_to_corners(boxes):
@@ -37,28 +38,57 @@ def bbox_to_img_coords(bbox, image):
     bbox[:, 3] = torch.clamp(bbox[:, 3] * image.shape[1], min=0, max=image.shape[1])
     return bbox
 
-def make_bbox_grid(images, bboxes, decimation_factor=5):
+def make_bbox_grid(images, bboxes, gt_bboxes=[], decimation=5):
     """ 
     Create a grid of images with bounding boxes
     Args:
         images (list): List of images, each of shape (batch, channels, height, width)
-        bboxes (list): List of bounding boxes, each of shape (batch, 4)
+        bboxes (list): List of bounding boxes, each of shape (batch, 4). Should be from 0 to 1
+        gt_bboxes (list): List of ground truth bounding boxes, each of shape (batch, 4). Should be from 0 to 1
+        decimation (int): Decimation factor for the images. Will only show every decimation'th image
     """
     # For now, just show the first clip in the batch
     batch_ind = 0
     bbox_list = []
+    one_bad_bbox = False
     for i in range(len(images)):
-        if i % decimation_factor != 0:
+        if i % decimation != 0:
             continue
         image = TF.convert_image_dtype(images[i][batch_ind, :, :, :], dtype=torch.uint8)
         # Requires a dimension to possibly display multiple bounding boxes
         bbox = bboxes[i][batch_ind, :].unsqueeze(0)
         # Convert bounding boxes from [0, 1] range to image coordinates
         bbox = bbox_to_img_coords(bbox, image) # Also clips to image dimensions
-        bbox_list.append(torchvision.utils.draw_bounding_boxes(image, bbox, colors=["green"], width=5))
+        bb_to_draw = None
+        if len(gt_bboxes) > 0:
+            gt_bbox = gt_bboxes[i][batch_ind, :].unsqueeze(0)
+            gt_bbox = bbox_to_img_coords(gt_bbox, image)
+            # Still draw the ground truth bounding box even if the model output is invalid
+            if not one_bad_bbox and bbox_valid(bbox):
+                colors = ["red", "green"]
+                bb_to_draw = torch.cat([bbox, gt_bbox], dim=0)
+            else:
+                if not one_bad_bbox:
+                    logging.info(f"Predicted bounding box invalid, drawing gt bbox only")
+                    one_bad_bbox = True
+                colors = ["green"]
+                logging.info(f"Ground truth bbox: {gt_bbox}")
+                bb_to_draw = gt_bbox
+        else:
+            bb_to_draw = bbox
+            colors = ["red"]
+        bbox_list.append(torchvision.utils.draw_bounding_boxes(image, bb_to_draw, colors=colors, width=5))
     bbox_grid = torchvision.utils.make_grid(bbox_list)
     return bbox_grid
 
+def bbox_valid(bbox):
+    """
+    Check if a bounding box is valid (i.e. has a width and height > 0)
+    bbox: [batch]x 4 tensor [xlow, xhigh, ylow,yhigh]
+    """
+    # Check that for all batch elements, xhigh > xlow and yhigh > ylow
+    all_valid = torch.all(bbox[...,0:1] < bbox[...,1:2],dim=-1) & torch.all(bbox[...,2:3] < bbox[...,3:4],dim=-1)
+    return all_valid
 
 def draw_bboxes(images,bboxs,fixation_bboxs=None):
     

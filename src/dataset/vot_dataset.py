@@ -83,6 +83,9 @@ class VotDataset(Dataset):
         for i in range(self.seq_len): 
             # Resize and remap colorspace to 0.0-1.0
             images[i] = self.resize(read_image(Path.join(viddir,f'color/{start_idx + i+1:08d}.jpg'))) / 255.0
+        groundtruth = torch.stack([
+            groundtruth[:,0], groundtruth[:,1], groundtruth[:,0] + groundtruth[:,2], groundtruth[:,1] + groundtruth[:,3]
+        ],dim=-1)
         return images,groundtruth
     
     def __getitem__(self,idx):
