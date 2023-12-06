@@ -30,11 +30,11 @@ logging.basicConfig(
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 num_epochs = 3
-batch_size_train = 3
+batch_size_train = 3 #5
 batch_size_test = 10
 learning_rate = 0.0001
 momentum = 0.5
-clip_length_s_train = 0.5
+clip_length_s_train = 0.5#0.3
 clip_length_s_test = 1
 save_model = True
 model_dir = "models"

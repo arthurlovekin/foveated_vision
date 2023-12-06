@@ -110,16 +110,26 @@ class CombinerModel(nn.Module):
         """
         super().__init__()
         self.positional_encoding = PositionalEncoding(n_inputs, dropout)
-        self.transformer_encoder_layer = nn.TransformerEncoderLayer(
-            d_model=n_inputs,
-            nhead=n_heads,
-            dim_feedforward=2048,
-            dropout=dropout,
-            batch_first=True,
+        # self.transformer_encoder_layer = nn.TransformerEncoderLayer(
+        #     d_model=n_inputs,
+        #     nhead=n_heads,
+        #     dim_feedforward=2048,
+        #     dropout=dropout,
+        #     batch_first=True,
+        # )
+        # self.transformer_model = nn.TransformerEncoder(
+        #     encoder_layer=self.transformer_encoder_layer, num_layers=n_encoder_layers
+        # )  # (contains multiple TransformerEncoderLayers)
+        # # Temporary: replace transformer with a simple linear model to see if it is a problem
+        self.transformer_model = nn.Sequential(
+            nn.Linear(n_inputs, 2048),
+            nn.ReLU(),
+            nn.Linear(2048, 2048),
+            nn.ReLU(),
+            nn.Linear(2048, n_inputs),
+            nn.ReLU(),
         )
-        self.transformer_model = nn.TransformerEncoder(
-            encoder_layer=self.transformer_encoder_layer, num_layers=n_encoder_layers
-        )  # (contains multiple TransformerEncoderLayers)
+
         # Map the encoded sequence to a bounding box.
         # TODO: This could use a more advanced decoder
         self.sequence_dim = buffer_size * n_inputs
@@ -251,7 +261,6 @@ class PeripheralFovealVisionModel(nn.Module):
         logging.debug(f"Buffer shape: {self.buffer.shape}")
 
         bbox, next_fixation = self.combiner_model(self.buffer)
-
         self.current_fixation = next_fixation
         return bbox, next_fixation
 
