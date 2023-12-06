@@ -30,7 +30,7 @@ logging.basicConfig(
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 num_epochs = 3
-batch_size_train = 6
+batch_size_train = 8
 batch_size_test = 10
 learning_rate = 0.00001
 momentum = 0.5
@@ -203,6 +203,7 @@ def test(model, test_loader, loss_fn, step=0):
 
 
 best_test_loss = float("inf")
+step = 0
 for epoch in range(num_epochs):
     logging.info(f"Starting epoch {epoch+1}/{num_epochs}")
     epoch_progress_bar = None
@@ -210,7 +211,6 @@ for epoch in range(num_epochs):
         epoch_progress_bar = tqdm(
             train_loader, desc=f"Epoch {epoch+1}/{num_epochs}", position=0, leave=True
         )  # Update position of other bars if using.
-    step = 0
     for seq_inputs, seq_labels in train_loader:
         total_loss = 0.0
         total_samples = 0
