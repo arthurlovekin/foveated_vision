@@ -23,7 +23,7 @@ from datetime import datetime
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO
+    level=logging.DEBUG
 )  # Change this to INFO or WARNING to reduce verbosity, or DEBUG for max spam
 
 # Set device
@@ -32,7 +32,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 num_epochs = 3
 batch_size_train = 3
 batch_size_test = 10
-learning_rate = 0.01
+learning_rate = 0.0001
 momentum = 0.5
 clip_length_s_train = 0.5
 clip_length_s_test = 1
