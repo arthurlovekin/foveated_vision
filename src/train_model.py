@@ -23,18 +23,18 @@ from datetime import datetime
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO
+    level=logging.DEBUG
 )  # Change this to INFO or WARNING to reduce verbosity, or DEBUG for max spam
 
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 num_epochs = 3
-batch_size_train = 3
+batch_size_train = 3 #5
 batch_size_test = 10
-learning_rate = 0.01
+learning_rate = 0.0001
 momentum = 0.5
-clip_length_s_train = 0.5
+clip_length_s_train = 0.5#0.3
 clip_length_s_test = 1
 save_model = True
 model_dir = "models"
@@ -157,6 +157,7 @@ def test(model, test_loader, loss_fn, step=0):
                 leave=True,
             )
             bboxes = []  # For tensorboard visualization.
+            gt_bboxes = []  # For tensorboard visualization.
             images = []  # For tensorboard visualization.
             # TODO: show bounding box on image in tensorboard
             for inputs, labels in frame_progress_bar:
@@ -172,6 +173,7 @@ def test(model, test_loader, loss_fn, step=0):
                 # Add the bounding box to the list for visualization
                 images.append(curr_inputs)
                 bboxes.append(curr_bbox)
+                gt_bboxes.append(curr_labels)
                 vloss = loss_fn(curr_bbox, next_fixation, curr_labels, next_labels)
                 running_vloss += vloss
                 curr_inputs = next_inputs
@@ -180,7 +182,7 @@ def test(model, test_loader, loss_fn, step=0):
             # For now, just show the first clip in the batch
             logging.info(f"Test loop: first estimated bbox: {bboxes[0]}")
             try:
-                bbox_grid = make_bbox_grid(images, bboxes)
+                bbox_grid = make_bbox_grid(images, bboxes, gt_bboxes, decimation=5)
                 writer.add_image("images/test", bbox_grid, step)
                 logging.info(f"Wrote image grid to tensorboard at step {step}")
             except Exception as e:

@@ -5,6 +5,7 @@ import torch
 from torch import nn
 from torchinfo import summary
 from torchvision.models import ResNet50_Weights, resnet50
+# from torchvision.models.detection import ssdlite320_mobilenet_v3_large, SSDLite320_MobileNet_V3_Large_Weights
 from torchvision.transforms import Resize
 
 from foveation_module import FoveationModule
@@ -12,7 +13,6 @@ from foveation_module import FoveationModule
 # from typing import Tensor
 
 RESNET_DEFAULT_INPUT_SIZE = (224, 224)
-
 
 class PeripheralModel(nn.Module):
     """
@@ -23,15 +23,17 @@ class PeripheralModel(nn.Module):
 
     def __init__(self):
         super().__init__()
+        # self.pretrained = ssdlite320_mobilenet_v3_large(weights=SSDLite320_MobileNet_V3_Large_Weights.DEFAULT)
+        # if hasattr(self.pretrained, "head"):
+        #     self.pretrained.head = torch.nn.Identity()
+        # else:
+        #     logging.error("No 'head' layer found in pretrained model")
         self.pretrained = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
         if hasattr(self.pretrained, "fc"):
             self.pretrained.fc = torch.nn.Identity()
         else:
             logging.error("No fc layer found in pretrained model")
-        # self.pretrained.fc = nn.Linear(2048, 4)
-        # self.pretrined_new = torch.nn.Sequential(*list(self.pretrained.children())[:-1])
-        # for param in self.pretrained[-1].parameters():
-        #     param.requires_grad = False
+
 
     def forward(self, low_res_image):
         # output: (batch, 2048) feature vector
@@ -52,6 +54,11 @@ class FovealModel(nn.Module):
             self.pretrained.fc = torch.nn.Identity()
         else:
             logging.error("No fc layer found in pretrained model")
+        # self.pretrained = ssdlite320_mobilenet_v3_large(weights=SSDLite320_MobileNet_V3_Large_Weights.DEFAULT)
+        # if hasattr(self.pretrained, "head"):
+        #     self.pretrained.head = torch.nn.Identity()
+        # else:
+        #     logging.error("No 'head' layer found in pretrained model")
 
     def forward(self, foveal_patch):
         # output: (batch, 2048) feature vector
@@ -110,16 +117,26 @@ class CombinerModel(nn.Module):
         """
         super().__init__()
         self.positional_encoding = PositionalEncoding(n_inputs, dropout)
-        self.transformer_encoder_layer = nn.TransformerEncoderLayer(
-            d_model=n_inputs,
-            nhead=n_heads,
-            dim_feedforward=2048,
-            dropout=dropout,
-            batch_first=True,
+        # self.transformer_encoder_layer = nn.TransformerEncoderLayer(
+        #     d_model=n_inputs,
+        #     nhead=n_heads,
+        #     dim_feedforward=2048,
+        #     dropout=dropout,
+        #     batch_first=True,
+        # )
+        # self.transformer_model = nn.TransformerEncoder(
+        #     encoder_layer=self.transformer_encoder_layer, num_layers=n_encoder_layers
+        # )  # (contains multiple TransformerEncoderLayers)
+        # # Temporary: replace transformer with a simple linear model to see if it is a problem
+        self.transformer_model = nn.Sequential(
+            nn.Linear(n_inputs, 2048),
+            nn.ReLU(),
+            nn.Linear(2048, 2048),
+            nn.ReLU(),
+            nn.Linear(2048, n_inputs),
+            nn.ReLU(),
         )
-        self.transformer_model = nn.TransformerEncoder(
-            encoder_layer=self.transformer_encoder_layer, num_layers=n_encoder_layers
-        )  # (contains multiple TransformerEncoderLayers)
+
         # Map the encoded sequence to a bounding box.
         # TODO: This could use a more advanced decoder
         self.sequence_dim = buffer_size * n_inputs
@@ -131,6 +148,7 @@ class CombinerModel(nn.Module):
             nn.Linear(self.sequence_dim, fixation_length),
             nn.Sigmoid(),  # make outputs 0-1
         )
+        self.min_bbox_width = 0.01
 
     def forward(self, all_features_buffer):
         # Transformer expects input of shape (batch, seq_len, feature_len)
@@ -251,7 +269,6 @@ class PeripheralFovealVisionModel(nn.Module):
         logging.debug(f"Buffer shape: {self.buffer.shape}")
 
         bbox, next_fixation = self.combiner_model(self.buffer)
-
         self.current_fixation = next_fixation
         return bbox, next_fixation
 

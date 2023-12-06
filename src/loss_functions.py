@@ -164,10 +164,10 @@ if __name__ == "__main__":
     )
     bbs = torch.tensor([[-1, 1, -1, 1]] * 8)
     # losses = fl(xes,bbs)
-    # print(losses)
+    # logging.debug(losses)
     # expected_losses = torch.tensor([[0,0,0,0,0,0.5,0.5,(2.0**0.5)/2]]).T
-    # print(losses-expected_losses)
-    # print(torch.allclose(losses, expected_losses))
+    # logging.debug(losses-expected_losses)
+    # logging.debug(torch.allclose(losses, expected_losses))
     # # assert(torch.allclose(losses, expected_losses))
 
     # test iou
@@ -181,6 +181,52 @@ if __name__ == "__main__":
         axis=-1,
     )
     pred_boxes = center_width_to_corners(fixationbox)
+    logging.debug(pred_boxes,bbs)
+    iou_loss(pred_boxes,bbs)
+    for i in range(8):
+        pred, actual = pred_boxes[i:i+1], bbs[i:i+1]
+        logging.debug(pred, actual)
+        logging.debug(torchvision.ops.generalized_box_iou(pred,actual))
+        logging.debug(torchvision.ops.generalized_box_iou_loss(pred,actual))
+        logging.debug(iou_loss(pred,actual))
+
+    for mode in ['distance','complete','generalized','default']:
+        iou_loss = IntersectionOverUnionLoss(mode=mode)
+        groundtruth_bbox = torch.tensor([[0.0,0.0,0.5,0.5]])
+        test_bbox = torch.tensor([[0.25,0.25,0.5,0.5]])
+        loss = iou_loss(groundtruth_bbox, test_bbox)
+        logging.info(f"Standard example, batch = 1  -- {mode} IoU Loss: {loss}, IoU: {0.25}")
+
+        groundtruth_bbox = torch.tensor([[0.0,0.0,0.5,0.5]])
+        test_bbox = torch.tensor([[0.0,0.0,0.5,0.5]])
+        loss = iou_loss(groundtruth_bbox, test_bbox)
+        logging.info(f"Perfect Match, batch = 1     -- {mode} IoU Loss: {loss}, IoU: 1.0")
+
+        # test larger batchsize
+        groundtruth_bbox = torch.tensor([[0.0,0.0,0.5,0.5],[0.0,0.0,0.5,0.5]])
+        test_bbox = torch.tensor([[0.0,0.0,0.5,0.5],[0.0,0.0,0.5,0.5]])
+        loss = iou_loss(groundtruth_bbox, test_bbox)
+        logging.info(f"Perfect Match, batch = 2     -- {mode} IoU Loss: {loss}, IoU: 1.0")
+
+        # test when bounding box has size 0
+        groundtruth_bbox = torch.tensor([[0.0,0.0,0.5,0.5]])
+        test_bbox = torch.tensor([[0.0,0.0,0.0,0.0]])
+        loss = iou_loss(groundtruth_bbox, test_bbox)
+        logging.info(f"Zero bounding box, batch = 1 -- {mode} IoU Loss: {loss}, IoU: 0.0")
+
+        # test when bounding box has nans
+        groundtruth_bbox = torch.tensor([[0.0,0.0,0.5,0.5]])
+        test_bbox = torch.tensor([[float('nan'),float('nan'),float('nan'),float('nan')]])
+        loss = iou_loss(groundtruth_bbox, test_bbox)
+        logging.info(f"NaN bounding box, batch = 1  -- {mode} IoU Loss: {loss}, IoU: 0.0")
+
+        logging.info("------------------")
+
+
+
+
+
+
     print(pred_boxes, bbs)
     iou_loss(pred_boxes, bbs)
     for i in range(8):
