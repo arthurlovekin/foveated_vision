@@ -30,11 +30,11 @@ logging.basicConfig(
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 num_epochs = 3
-batch_size_train = 3
+batch_size_train = 6
 batch_size_test = 10
-learning_rate = 0.01
+learning_rate = 0.00001
 momentum = 0.5
-clip_length_s_train = 0.5
+clip_length_s_train = 0.25
 clip_length_s_test = 1
 save_model = True
 model_dir = "models"
@@ -42,7 +42,7 @@ if not os.path.exists(model_dir):
     os.makedirs(model_dir)
 test_frequency = 10  # Evaluate on test set every N steps.
 save_frequency = (
-    test_frequency * 20
+    test_frequency * 8
 )  # Save model every N steps. Must be a multiple of test_frequency as we only save if the test loss is better.
 use_epoch_progress_bar = (
     False  # Use epoch progress bar in addition to step progress bar
@@ -297,16 +297,16 @@ for epoch in range(num_epochs):
         # Evaluate on test set
         if step % test_frequency == 0:
             test_loss = test(model, test_loader, foveation_loss, step).item()
-            if test_loss < best_test_loss:
+            better = test_loss < best_test_loss
+            if better and save_model and step % save_frequency == 0 and step != 0:
                 logging.info(f"New best test loss: {test_loss:.4f}")
                 best_test_loss = test_loss
                 # Save model checkpoint
-                if save_model and step % save_frequency == 0 and step != 0:
-                    date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    model_path = os.path.join(
-                        model_dir, f"{date_str}_model_epoch_{epoch+1}_step_{step}.pth"
-                    )
-                    torch.save(model.state_dict(), model_path)
+                date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+                model_path = os.path.join(
+                    model_dir, f"{date_str}_model_epoch_{epoch+1}_step_{step}.pth"
+                )
+                torch.save(model.state_dict(), model_path)
             model.train()  # Set back to train mode
         step += 1
 
