@@ -32,15 +32,12 @@ def bbox_to_img_coords(bbox, image):
         image (torch.tensor): (channels, height, width) image
     """
     # Convert each corner and clip to image bounds
-    print('pre')
-    print(bbox)
     bbox = torch.stack(
         [torch.clamp(bbox[:, 0] * image.shape[-2], min=0, max=image.shape[-2]),
          torch.clamp(bbox[:, 1] * image.shape[-2], min=0, max=image.shape[-2]),
          torch.clamp(bbox[:, 2] * image.shape[-1], min=0, max=image.shape[-1]),
          torch.clamp(bbox[:, 3] * image.shape[-1], min=0, max=image.shape[-1])
         ],axis=1) 
-    print(bbox)
     return bbox
 
 def make_bbox_grid(images, bboxes, gt_bboxes=[], decimation=5):
@@ -62,9 +59,6 @@ def make_bbox_grid(images, bboxes, gt_bboxes=[], decimation=5):
         image = TF.convert_image_dtype(images[i][batch_ind, :, :, :], dtype=torch.uint8)
         # Requires a dimension to possibly display multiple bounding boxes
         bbox = bboxes[i][batch_ind, :].unsqueeze(0)
-        print('\n\n\n')
-
-        print(bbox)
         # Convert bounding boxes from [0, 1] range to image coordinates
         bbox = bbox_to_img_coords(bbox, image) # Also clips to image dimensions
         bb_to_draw = None
@@ -112,15 +106,12 @@ def fix_fovea_if_needed(fixations,default_shape):
 def cwh_perc_to_pixel_xyxy(bbox,image_shape,default_fovea_shape=[0.25,0.25]): 
         bbox = fix_fovea_if_needed(bbox,default_shape=default_fovea_shape)
         bbox = center_width_to_corners(bbox)
-        # print(bbox)
         bbox[...,0:2] = torch.clamp(bbox[...,0:2] * image_shape[-2], 0, image_shape[-2])
         bbox[...,2:4] = torch.clamp(bbox[...,2:4] * image_shape[-1], 0, image_shape[-1])
 
         return bbox[:,torch.tensor([0,2,1,3])].int()
 
 def xxyy_perc_to_pixel_xyxy(bbox,image_shape): 
-        print(bbox[0:4])
-        # print(bbox)
         bbox[...,0:2] = torch.clamp(bbox[...,0:2] * image_shape[-2], 0, image_shape[-2])
         bbox[...,2:4] = torch.clamp(bbox[...,2:4] * image_shape[-1], 0, image_shape[-1])
 
