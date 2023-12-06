@@ -9,7 +9,6 @@ from utils import center_width_to_corners
 # TODO: Could make all loss functions nn.Modules if they contain learnable parameters
 # (just swap out the __call__ for a forward method, and add (nn.Module) after the class name)
 
-
 class FoveationLoss:
     def __init__(self,img_size):
         self.img_size = img_size
@@ -31,7 +30,6 @@ class FoveationLoss:
         # Sum over batch dimension
         return torch.sum(dist_squared,dim=0)
     
-
 
 class IntersectionOverUnionLoss:
     """
@@ -74,11 +72,11 @@ class IntersectionOverUnionLoss:
 
 class PeripheralFovealVisionModelLoss:
     def __init__(self,default_fovea_shape=(None,None)):
-        self.iou_loss = IntersectionOverUnionLoss(mode='generalized')
+        self.iou_loss = IntersectionOverUnionLoss(mode='complete')
         # TODO: Make this independent of the image size?
         self.foveation_loss = FoveationLoss((224,224))
         self.iou_weight = 1.0
-        self.foveation_weight = 1.0
+        self.foveation_weight = 0.0
         self.scale_weight = 0.0  # Disabled by default
         self.default_width, self.default_height = default_fovea_shape
 
@@ -100,7 +98,7 @@ class PeripheralFovealVisionModelLoss:
         """
         fixation_bbox = self.fix_fovea_if_needed(next_fixation)
         loss_iou = self.iou_loss(curr_bbox, true_curr_bbox)
-        print(loss_iou.tolist())
+        logging.debug(f"IOU loss: {loss_iou.tolist()}")
         # TODO: Just output 4 points directly from the model
         fovea_corner_parametrization = center_width_to_corners(fixation_bbox)
         loss_foveation = self.iou_loss(fovea_corner_parametrization, true_next_bbox)
