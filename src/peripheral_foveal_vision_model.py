@@ -5,6 +5,7 @@ import torch
 from torch import nn
 from torchinfo import summary
 from torchvision.models import ResNet50_Weights, resnet50
+# from torchvision.models.detection import ssdlite320_mobilenet_v3_large, SSDLite320_MobileNet_V3_Large_Weights
 from torchvision.transforms import Resize
 
 from foveation_module import FoveationModule
@@ -12,7 +13,6 @@ from foveation_module import FoveationModule
 # from typing import Tensor
 
 RESNET_DEFAULT_INPUT_SIZE = (224, 224)
-
 
 class PeripheralModel(nn.Module):
     """
@@ -23,15 +23,17 @@ class PeripheralModel(nn.Module):
 
     def __init__(self):
         super().__init__()
+        # self.pretrained = ssdlite320_mobilenet_v3_large(weights=SSDLite320_MobileNet_V3_Large_Weights.DEFAULT)
+        # if hasattr(self.pretrained, "head"):
+        #     self.pretrained.head = torch.nn.Identity()
+        # else:
+        #     logging.error("No 'head' layer found in pretrained model")
         self.pretrained = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
         if hasattr(self.pretrained, "fc"):
             self.pretrained.fc = torch.nn.Identity()
         else:
             logging.error("No fc layer found in pretrained model")
-        # self.pretrained.fc = nn.Linear(2048, 4)
-        # self.pretrined_new = torch.nn.Sequential(*list(self.pretrained.children())[:-1])
-        # for param in self.pretrained[-1].parameters():
-        #     param.requires_grad = False
+
 
     def forward(self, low_res_image):
         # output: (batch, 2048) feature vector
@@ -52,6 +54,11 @@ class FovealModel(nn.Module):
             self.pretrained.fc = torch.nn.Identity()
         else:
             logging.error("No fc layer found in pretrained model")
+        # self.pretrained = ssdlite320_mobilenet_v3_large(weights=SSDLite320_MobileNet_V3_Large_Weights.DEFAULT)
+        # if hasattr(self.pretrained, "head"):
+        #     self.pretrained.head = torch.nn.Identity()
+        # else:
+        #     logging.error("No 'head' layer found in pretrained model")
 
     def forward(self, foveal_patch):
         # output: (batch, 2048) feature vector
