@@ -161,13 +161,16 @@ class NonNullVotDataset(Dataset):
         return self.get_vid(idx)
 
 
-def get_dataloader(dataset_name='longterm',targ_size = None,batch_size=3, clip_length_s=5, shuffle=True, seed = None,**loader_kwargs):
+def get_dataloader(nullish_dataset=False, dataset_name='longterm',targ_size = None,batch_size=3, clip_length_s=5, shuffle=True, seed = None,**loader_kwargs):
     collate_fn = None
     if seed is None: 
         seed = int(time.time()*1000)
         # print(seed)
-    if 'generator' not in loader_kwargs: 
+    if nullish_dataset: 
         ds = VotDataset(dataset_name=dataset_name,targ_size=targ_size, clip_secs=clip_length_s)
+    else: 
+        ds = NonNullVotDataset(dataset_name=dataset_name,targ_size=targ_size, clip_secs=clip_length_s)
+    if 'generator' not in loader_kwargs: 
         gen = torch.Generator()
         loader_kwargs['generator'] = gen
     gen.manual_seed(seed)
