@@ -304,7 +304,7 @@ for epoch in range(num_epochs):
                 # Save model checkpoint
                 date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
                 model_path = os.path.join(
-                    model_dir, f"{date_str}_model_epoch_{epoch+1}_step_{step}.pth"
+                    model_dir, f"{date_str}_model_epoch_{epoch+1}_step_{step}_{best_test_loss:.6f}.pth"
                 )
                 torch.save(model.state_dict(), model_path)
             model.train()  # Set back to train mode
