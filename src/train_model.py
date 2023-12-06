@@ -30,8 +30,8 @@ logging.basicConfig(
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 num_epochs = 3
-batch_size_train = 6
-batch_size_test = 10
+batch_size_train = 9
+batch_size_test = 15
 learning_rate = 0.00001
 momentum = 0.5
 clip_length_s_train = 0.25
@@ -304,7 +304,7 @@ for epoch in range(num_epochs):
                 # Save model checkpoint
                 date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
                 model_path = os.path.join(
-                    model_dir, f"{date_str}_model_epoch_{epoch+1}_step_{step}.pth"
+                    model_dir, f"{date_str}_model_epoch_{epoch+1}_step_{step}_loss_{best_test_loss}.pth"
                 )
                 torch.save(model.state_dict(), model_path)
             model.train()  # Set back to train mode
