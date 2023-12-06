@@ -40,6 +40,7 @@ class IntersectionOverUnionLoss:
     """
     def __init__(self, mode='complete'): 
         self.mode = mode
+
     
     def __call__(self,box1,box2): 
         """
@@ -47,41 +48,39 @@ class IntersectionOverUnionLoss:
         box2: tensor of shape [batch, 4] where the 4 values are [x1,y1,x2,y2] (bounding box corners)
         """
         if self.mode == 'distance':
-            # # x1 + x2 / 2, y1 + y2 / 2 
-            # centers1 = (box1[...,0:2] + box1[...,2:4]) / 2.0
-            # centers2 = (box2[...,0:2] + box2[...,2:4]) / 2.0
-            # center_distance_squared = torch.sum((centers1 - centers2)**2,dim=-1)
-
-            # # Find max between two possible diagonal distances
-            # corner_distance_squared = max(torch.sum(box1[...,0:2]**2,dim=-1),torch.sum(box1[...,2:4]**2,dim=-1))
-            # distance_iou_loss = 1.0 - iou + center_distance_squared / center_distance_squared
-            # return torch.sum(torchvision.ops.complete_box_iou(box1, box2)[0])
-            return torchvision.ops.distance_box_iou_loss(box1, box2, reduction='sum')
-        if self.mode == 'complete':
-            return torchvision.ops.complete_box_iou_loss(box1, box2, reduction='sum')
+            loss = torchvision.ops.distance_box_iou_loss(box1, box2, reduction='sum')
+        elif self.mode == 'complete':
+            loss = torchvision.ops.complete_box_iou_loss(box1, box2, reduction='sum')
         elif self.mode == 'generalized':
-        # Seems strictly worse than distance and complete
-            return torchvision.ops.generalized_box_iou_loss(box1, box2, reduction='sum')
-        elif self.mode == 'neg_iou_generalised':
-            return - torch.sum(torchvision.ops.generalized_box_iou(box1, box2,))
+            # Seems strictly worse than distance and complete
+            loss = torchvision.ops.generalized_box_iou_loss(box1, box2, reduction='sum')
         else:
             # box_iou returns NxM matrix containing the pairwise IoU values for every element in boxes1 and boxes2
             # so sum over the diagonal, where the ground-truth box is matched to the predicted box
             batch_size = box1.shape[0] if len(box1.shape) > 1 else 1
-            return 1.0*batch_size - torch.sum(torch.diag(torchvision.ops.box_iou(box1, box2)))
-        
+            loss = 1.0*batch_size - torch.sum(torch.diag(torchvision.ops.box_iou(box1, box2)))
+        # warn if loss is nan
+        if loss != loss: 
+            logging.warning(f"NaN IoU loss, box1: {box1}, box2: {box2}")
+        # WARNING: broken because it doesn't handle inverted bounding box corners
+        return loss
+
 
 class PeripheralFovealVisionModelLoss:
     def __init__(self,default_fovea_shape=(None,None)):
-        self.iou_loss = IntersectionOverUnionLoss(mode='generalized')
-        # TODO: Make this independent of the image size?
-        self.foveation_loss = FoveationLoss((224,224))
-        self.iou_weight = 1.0
-        self.foveation_weight = 1.0
-        self.scale_weight = 0.0  # Disabled by default
+        self.mse_loss = nn.MSELoss()
+        self.iou_loss = IntersectionOverUnionLoss(mode='complete') # WARNING: broken because it doesn't handle inverted bounding box corners
+        self.foveation_loss = FoveationLoss((224,224))         # TODO: Make this independent of the image size?
+        self.mse_weight = 1.0
+        self.iou_weight = 0.0 # WARNING: setting this to 1 is breaking things
+        self.foveation_weight = 0.0
         self.default_width, self.default_height = default_fovea_shape
 
     def fix_fovea_if_needed(self,fixations):
+        """
+        If fixation is two points, add a default width and height
+        so we can use IoU loss on the fixation as well as the bounding box output.
+        """
         if fixations.shape[-1] == 2: 
             return torch.cat([
                     fixations,
@@ -97,19 +96,27 @@ class PeripheralFovealVisionModelLoss:
         1. Intersection over union loss between the current bounding box and the ground-truth current bounding box
         2. Foveation loss between the next fixation and the ground-truth bounding box (from the next timestep)
         """
-        fixation_bbox = self.fix_fovea_if_needed(next_fixation)
-        loss_iou = self.iou_loss(curr_bbox, true_curr_bbox)
-        print(loss_iou.tolist())
-        # TODO: Just output 4 points directly from the model
-        fovea_corner_parametrization = center_width_to_corners(fixation_bbox)
-        loss_foveation = self.iou_loss(fovea_corner_parametrization, true_next_bbox)
-        logging.debug(f'bbox: predicted{curr_bbox} ')
-        logging.debug(f'bbox: actual   {true_curr_bbox} ')
-        logging.debug(f'fovea: predicted{fovea_corner_parametrization} ')
-        logging.debug(f'fovea: actual   {true_next_bbox} ')
-        logging.debug(f"foveation_loss (also an iou loss): {loss_foveation}, loss_iou: {loss_iou}")
-        # loss_foveation = self.foveation_loss(next_fixation, true_next_bbox)
-        return self.iou_weight*loss_iou + self.foveation_weight*loss_foveation
+
+        if self.mse_weight != 0.0:
+            mse_loss = self.mse_loss(curr_bbox, true_curr_bbox)
+        else:
+            mse_loss = 0.0
+
+        if self.iou_weight != 0.0:
+            iou_loss = self.iou_loss(curr_bbox, true_curr_bbox)
+        else: 
+            iou_loss = 0.0
+        
+        if self.foveation_weight != 0.0:
+            # TODO: Just output 4 points directly from the model
+            fixation_bbox = self.fix_fovea_if_needed(next_fixation)
+            fovea_corner_parametrization = center_width_to_corners(fixation_bbox)
+            foveation_loss = self.iou_loss(fovea_corner_parametrization, true_next_bbox)
+        else:
+            foveation_loss = 0.0
+        
+        return self.mse_weight*mse_loss + self.iou_weight*iou_loss + self.foveation_weight*foveation_loss
+
 
 
 if __name__ == "__main__": 
