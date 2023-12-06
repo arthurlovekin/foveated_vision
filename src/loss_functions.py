@@ -67,6 +67,10 @@ class PeripheralFovealVisionModelLoss:
         self.default_width, self.default_height = default_fovea_shape
 
     def fix_fovea_if_needed(self,fixations):
+        """
+        If fixation is two points, add a default width and height
+        so we can use IoU loss on the fixation as well as the bounding box output.
+        """
         if fixations.shape[-1] == 2: 
             return torch.cat([
                     fixations,
@@ -86,8 +90,9 @@ class PeripheralFovealVisionModelLoss:
         print(f'bbox: predicted{curr_bbox} ')
         print(f'bbox: actual   {true_curr_bbox} ')
         loss_iou = self.iou_loss(curr_bbox, true_curr_bbox)
-        print(loss_iou.tolist())
+        # logging.debug(f"IoU loss: {loss_iou.tolist()}")
         # TODO: Just output 4 points directly from the model
+        # Model currently just outputs fixation center, while the width and height of the fovea are fixed.
         fovea_corner_parametrization = center_width_to_corners(fixation_bbox)
         print(f'fovea: predicted{fovea_corner_parametrization} ')
         print(f'fovea: actual   {true_next_bbox} ')
