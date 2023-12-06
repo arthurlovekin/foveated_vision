@@ -99,7 +99,7 @@ def get_dataloader(dataset_name='longterm',targ_size = None,batch_size=3, clip_l
     collate_fn = None
     if seed is None: 
         seed = int(time.time()*1000)
-        print(seed)
+        # print(seed)
     if 'generator' not in loader_kwargs: 
         ds = VotDataset(dataset_name=dataset_name,targ_size=targ_size, clip_secs=clip_length_s)
         gen = torch.Generator()
