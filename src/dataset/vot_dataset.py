@@ -90,7 +90,6 @@ class VotDataset(Dataset):
         return images,groundtruth
     
     def __getitem__(self,idx):
-        print(idx)
         if self.in_mem: 
             return self.video_caches
         return self.get_vid(idx)

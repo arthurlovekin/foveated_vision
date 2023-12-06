@@ -97,9 +97,17 @@ def bbox_valid(bbox):
     # Check that for all batch elements, xhigh > xlow and yhigh > ylow
     all_valid = torch.all(bbox[...,0:1] < bbox[...,1:2],dim=-1) & torch.all(bbox[...,2:3] < bbox[...,3:4],dim=-1)
     return all_valid
-
-def draw_bboxes(images,bboxs,fixation_bboxs=None):
     
+def fix_fovea_if_needed(fixations,default_shape):
+    if fixations.shape[-1] == 2: 
+        return torch.cat([
+                fixations,
+                torch.full_like(fixations[...,0:1],default_shape[0]),
+                torch.full_like(fixations[...,1:2],default_shape[1]),
+            ],axis=-1)
+    else: 
+        return fixations
+
 def cwh_perc_to_pixel_xyxy(bbox,image_shape,default_fovea_shape=[0.25,0.25]): 
         bbox = fix_fovea_if_needed(bbox,default_shape=default_fovea_shape)
         bbox = center_width_to_corners(bbox)
