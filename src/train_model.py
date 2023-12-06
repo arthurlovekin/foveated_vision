@@ -1,26 +1,26 @@
 # From https://moiseevigor.github.io/software/2022/12/18/one-pager-training-resnet-on-imagenet/
 # Simple example training ResNet on MNIST just as a proof of concept test for training.
+from utils import bbox_to_img_coords, make_bbox_grid
+from peripheral_foveal_vision_model import PeripheralFovealVisionModel
+from loss_functions import (IntersectionOverUnionLoss,
+                            PeripheralFovealVisionModelLoss)
+from dataset.vot_dataset import *
+from dataset.got10k_dataset import *
+from tqdm import tqdm
+from torch.utils.tensorboard import SummaryWriter
+import torchvision.transforms.functional as TF
+import logging
 from datetime import datetime
 
 import torch
 import torchvision
 
 torchvision.disable_beta_transforms_warning()
-import logging
 
-import torchvision.transforms.functional as TF
-from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
-
-from dataset.got10k_dataset import *
-from dataset.vot_dataset import *
-from loss_functions import (IntersectionOverUnionLoss,
-                            PeripheralFovealVisionModelLoss)
-from peripheral_foveal_vision_model import PeripheralFovealVisionModel
-from utils import bbox_to_img_coords, make_bbox_grid
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)  # Change this to INFO or WARNING to reduce verbosity, or DEBUG for max spam
+# Change this to INFO or WARNING to reduce verbosity, or DEBUG for max spam
+logging.basicConfig(level=logging.INFO)
 
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -37,15 +37,19 @@ model_dir = "models"
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
 test_frequency = 10  # Evaluate on test set every N steps.
-save_frequency = test_frequency*20  # Save model every N steps. Must be a multiple of test_frequency as we only save if the test loss is better.
-use_epoch_progress_bar = False  # Use epoch progress bar in addition to step progress bar
+# Save model every N steps. Must be a multiple of test_frequency as we only save if the test loss is better.
+save_frequency = test_frequency*20
+# Use epoch progress bar in addition to step progress bar
+use_epoch_progress_bar = False
 
 random_seed = 1
 torch.backends.cudnn.enabled = False
 torch.manual_seed(random_seed)
 
-train_loader = get_dataloader(batch_size=batch_size_train, targ_size=(224, 224), clip_length_s=clip_length_s_train)
-test_loader = get_dataloader(batch_size=batch_size_test, targ_size=(224, 224), clip_length_s=clip_length_s_test)
+train_loader = get_dataloader(batch_size=batch_size_train, targ_size=(
+    224, 224), clip_length_s=clip_length_s_train)
+test_loader = get_dataloader(batch_size=batch_size_test, targ_size=(
+    224, 224), clip_length_s=clip_length_s_test)
 
 # Load the model
 model = PeripheralFovealVisionModel()
@@ -58,7 +62,8 @@ default_fovea_shape = model.get_default_fovea_size()
 # Set the model to run on the device
 model = model.to(device)
 
-foveation_loss = PeripheralFovealVisionModelLoss(default_fovea_shape=default_fovea_shape)
+foveation_loss = PeripheralFovealVisionModelLoss(
+    default_fovea_shape=default_fovea_shape)
 foveation_loss.foveation_weight = 0.0  # TODO: Remove this, just for testing
 ce_loss = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -68,20 +73,24 @@ writer = SummaryWriter(flush_secs=2)
 # Show a batch of images
 images, labels = next(iter(train_loader))
 # images = images[0, :, :, :, :]  # Remove the batch dimension so we can display an entire sequence
-images = images[:, 0, :, :, :]  # Remove the sequence dimension so we can display the first frame for an entire batch
+# Remove the sequence dimension so we can display the first frame for an entire batch
+images = images[:, 0, :, :, :]
 grid = torchvision.utils.make_grid(images)
 writer.add_image('images', grid, 0)
 # writer.add_graph(model, images) # TODO: Fix "RuntimeError: Cannot insert a Tensor that requires grad as a constant. Consider making it a parameter or input, or detaching the gradient"
 
 # Train the model...
-print(f"Starting training with {num_epochs} epochs, batch size of {batch_size_train}, learning rate {learning_rate}, on device {device}")
+print(
+    f"Starting training with {num_epochs} epochs, batch size of {batch_size_train}, learning rate {learning_rate}, on device {device}")
 model.zero_grad()
+
 
 class SequenceIterator:
     """
     Iterate through the sequence but keep the batch dimension.
     Iterator class allows us to use tqdm progress bar.
     """
+
     def __init__(self, seq_inputs, seq_labels):
         """
         Args:
@@ -92,10 +101,10 @@ class SequenceIterator:
         self.seq_labels = seq_labels
         self.frame = 0
         self.num_frames = seq_inputs.shape[1]
-    
+
     def __iter__(self):
         return self
-    
+
     def __next__(self):
         if self.frame >= self.num_frames:
             raise StopIteration
@@ -106,7 +115,8 @@ class SequenceIterator:
 
     def __len__(self):
         return self.num_frames
-    
+
+
 def test(model, test_loader, loss_fn, step=0):
     # Evaluate on Test set https://pytorch.org/tutorials/beginner/introyt/trainingyt.html
     running_vloss = 0.0
@@ -126,7 +136,8 @@ def test(model, test_loader, loss_fn, step=0):
             seq_iterator = SequenceIterator(vinputs, vlabels)
             curr_inputs = None  # Evalulate on these so we have access to the "next" fixation
             curr_labels = None
-            frame_progress_bar = tqdm(seq_iterator, total=vinputs.shape[1], desc=f"Test set progress", position=1, leave=True)
+            frame_progress_bar = tqdm(
+                seq_iterator, total=vinputs.shape[1], desc=f"Test set progress", position=1, leave=True)
             bboxes = []  # For tensorboard visualization.
             images = []  # For tensorboard visualization.
             # TODO: show bounding box on image in tensorboard
@@ -143,7 +154,8 @@ def test(model, test_loader, loss_fn, step=0):
                 # Add the bounding box to the list for visualization
                 images.append(curr_inputs)
                 bboxes.append(curr_bbox)
-                vloss = loss_fn(curr_bbox, next_fixation, curr_labels, next_labels)
+                vloss = loss_fn(curr_bbox, next_fixation,
+                                curr_labels, next_labels)
                 running_vloss += vloss
                 curr_inputs = next_inputs
                 curr_labels = next_labels
@@ -160,22 +172,26 @@ def test(model, test_loader, loss_fn, step=0):
                 logging.error(f"Error creating image grid: {e}")
             writer.flush()  # Necessary, otherwise tensorboard doesn't update
             break  # Just do one batch for now, otherwise it'd take forever?
-    avg_vloss = running_vloss / total_samples  # Divide by total number of frames sampled across all batches
+    # Divide by total number of frames sampled across all batches
+    avg_vloss = running_vloss / total_samples
     print(f"Test loss: {avg_vloss.item():.4f}")
 
     # Log the running loss averaged per batch
     writer.add_scalar('Loss/validation',
-                    avg_vloss,
-                    step)
+                      avg_vloss,
+                      step)
     writer.flush()  # Unnecessary?
     return avg_vloss
+
 
 best_test_loss = float('inf')
 for epoch in range(num_epochs):
     logging.info(f"Starting epoch {epoch+1}/{num_epochs}")
     epoch_progress_bar = None
     if use_epoch_progress_bar:
-        epoch_progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}", position=0, leave=True)  # Update position of other bars if using.
+        # Update position of other bars if using.
+        epoch_progress_bar = tqdm(
+            train_loader, desc=f"Epoch {epoch+1}/{num_epochs}", position=0, leave=True)
     step = 0
     for seq_inputs, seq_labels in train_loader:
         total_loss = 0.0
@@ -190,14 +206,14 @@ for epoch in range(num_epochs):
         seq_labels = seq_labels.to(device)
         # Each iteration is a batch of sequences of images
         frame = 0
-        num_frames = seq_inputs.shape[1] 
+        num_frames = seq_inputs.shape[1]
         curr_inputs = None  # Train on these so we have access to the "next" fixation
         curr_labels = None
         # Iterate through the sequence and train on each one
         seq_iterator = SequenceIterator(seq_inputs, seq_labels)
         frame_progress_bar = tqdm(seq_iterator, total=num_frames, desc=f"Step {step+1} progress",
                                   position=(1 if use_epoch_progress_bar else 0), leave=True)
-        for inputs, labels in frame_progress_bar: 
+        for inputs, labels in frame_progress_bar:
             # Each iteration is a batch of sequences of images
             # Iterate through the sequence and train on each one
             if curr_inputs is None or curr_labels is None:
@@ -206,7 +222,7 @@ for epoch in range(num_epochs):
                 curr_labels = labels
                 frame += 1
                 continue
-            
+
             logging.debug(f"Current frame input shape: {curr_inputs.shape}")
             logging.debug(f"Current frame label shape: {curr_labels.shape}")
             if torch.cuda.is_available():
@@ -214,7 +230,8 @@ for epoch in range(num_epochs):
                 # Get free CUDA memory in GiB
                 used_memory = torch.cuda.memory_allocated() / 1024**3
                 logging.debug(f"Current used CUDA memory: {used_memory}")
-                writer.add_scalar('Memory/CUDA_used_GiB', used_memory, step*num_frames + frame)
+                writer.add_scalar('Memory/CUDA_used_GiB',
+                                  used_memory, step*num_frames + frame)
 
             # Already on device as views of larger tensors
             next_inputs = inputs
@@ -226,10 +243,12 @@ for epoch in range(num_epochs):
             logging.debug(f"Currrent true bbox: {curr_labels}")
             logging.debug(f"Next fixation: {next_fixation}")
             logging.debug(f"Next true bbox: {next_labels}")
-            loss = foveation_loss(curr_bbox, next_fixation, curr_labels, next_labels)
+            loss = foveation_loss(curr_bbox, next_fixation,
+                                  curr_labels, next_labels)
             loss = loss
 
-            writer.add_scalar('Loss/train_frame', loss.detach(), step*num_frames + frame)  # Loss for each frame
+            writer.add_scalar('Loss/train_frame', loss.detach(),
+                              step*num_frames + frame)  # Loss for each frame
             total_loss += loss
             total_samples += curr_labels.shape[0]
 
@@ -260,7 +279,8 @@ for epoch in range(num_epochs):
                 # Save model checkpoint
                 if save_model and step % save_frequency == 0 and step != 0:
                     date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    model_path = os.path.join(model_dir, f"{date_str}_model_epoch_{epoch+1}_step_{step}.pth")
+                    model_path = os.path.join(
+                        model_dir, f"{date_str}_model_epoch_{epoch+1}_step_{step}.pth")
                     torch.save(model.state_dict(), model_path)
             model.train()  # Set back to train mode
         step += 1

@@ -11,33 +11,36 @@ from utils import center_width_to_corners
 
 
 class FoveationLoss:
-    def __init__(self,img_size):
+    def __init__(self, img_size):
         self.img_size = img_size
-    
-    def __call__(self,fixation, bb): 
+
+    def __call__(self, fixation, bb):
         """
         fixation: [batch]x 2 tensor, fixation point 
         bb:       [batch]x 4  tensor [xlow, xhigh, ylow,yhigh] 
         """
-        xinside = torch.logical_and(bb[...,0:1] < fixation[...,0:1],  fixation[...,0:1] < bb[...,1:2])
-        xdist = torch.where(xinside,0,torch.min(torch.abs(fixation[...,0:1] - bb[...,0:1]),torch.abs(fixation[...,0:1] - bb[...,1:2]),))
+        xinside = torch.logical_and(
+            bb[..., 0:1] < fixation[..., 0:1],  fixation[..., 0:1] < bb[..., 1:2])
+        xdist = torch.where(xinside, 0, torch.min(torch.abs(
+            fixation[..., 0:1] - bb[..., 0:1]), torch.abs(fixation[..., 0:1] - bb[..., 1:2]),))
         logging.debug(f"x dist: {xdist}")
-        yinside = torch.logical_and(bb[...,2:3] < fixation[...,1:2], fixation[...,1:2] < bb[...,3:4])
-        ydist = torch.where(yinside,0,torch.min(torch.abs(fixation[...,1:2] - bb[...,2:3]),torch.abs(fixation[...,1:2] - bb[...,3:4]),))
+        yinside = torch.logical_and(
+            bb[..., 2:3] < fixation[..., 1:2], fixation[..., 1:2] < bb[..., 3:4])
+        ydist = torch.where(yinside, 0, torch.min(torch.abs(
+            fixation[..., 1:2] - bb[..., 2:3]), torch.abs(fixation[..., 1:2] - bb[..., 3:4]),))
         logging.debug(f"y dist: {ydist}")
         xdist = xdist / self.img_size[0]
         ydist = ydist / self.img_size[1]
         dist_squared = xdist**2 + ydist**2
         # Sum over batch dimension
-        return torch.sum(dist_squared,dim=0)
-    
+        return torch.sum(dist_squared, dim=0)
 
 
 class IntersectionOverUnionLoss:
-    def __init__(self, mode='default'): 
+    def __init__(self, mode='default'):
         self.mode = mode
-    
-    def __call__(self,box1,box2): 
+
+    def __call__(self, box1, box2):
         """
         bb1: [batch]x 4 tensor [xlow, xhigh, ylow,yhigh] 
         bb2: [batch]x 4 tensor [xlow, xhigh, ylow,yhigh] 
@@ -54,30 +57,30 @@ class IntersectionOverUnionLoss:
             return - torch.sum(torchvision.ops.generalized_box_iou(box1, box2,))
         else:
             return torch.sum(torchvision.ops.box_iou(box1, box2)[0])
-        
+
 
 class PeripheralFovealVisionModelLoss:
-    def __init__(self,default_fovea_shape=(None,None)):
+    def __init__(self, default_fovea_shape=(None, None)):
         self.iou_loss = IntersectionOverUnionLoss(mode='generalized')
         # TODO: Make this independent of the image size?
-        self.foveation_loss = FoveationLoss((224,224))
+        self.foveation_loss = FoveationLoss((224, 224))
         self.iou_weight = 1.0
         self.foveation_weight = 1.0
         self.scale_weight = 0.0  # Disabled by default
         self.default_width, self.default_height = default_fovea_shape
 
-    def fix_fovea_if_needed(self,fixations):
+    def fix_fovea_if_needed(self, fixations):
         """
         If fixation is two points, add a default width and height
         so we can use IoU loss on the fixation as well as the bounding box output.
         """
-        if fixations.shape[-1] == 2: 
+        if fixations.shape[-1] == 2:
             return torch.cat([
-                    fixations,
-                    torch.full_like(fixations[...,0:1],self.default_width),
-                    torch.full_like(fixations[...,1:2],self.default_height),
-                ],axis=-1)
-        else: 
+                fixations,
+                torch.full_like(fixations[..., 0:1], self.default_width),
+                torch.full_like(fixations[..., 1:2], self.default_height),
+            ], axis=-1)
+        else:
             return fixations
 
     def __call__(self, curr_bbox, next_fixation, true_curr_bbox, true_next_bbox):
@@ -96,25 +99,26 @@ class PeripheralFovealVisionModelLoss:
         fovea_corner_parametrization = center_width_to_corners(fixation_bbox)
         print(f'fovea: predicted{fovea_corner_parametrization} ')
         print(f'fovea: actual   {true_next_bbox} ')
-        loss_foveation = self.iou_loss(fovea_corner_parametrization, true_next_bbox)
+        loss_foveation = self.iou_loss(
+            fovea_corner_parametrization, true_next_bbox)
         print(loss_foveation.tolist())
         # loss_foveation = self.foveation_loss(next_fixation, true_next_bbox)
         return self.iou_weight*loss_iou + self.foveation_weight*loss_foveation
 
 
-if __name__ == "__main__": 
+if __name__ == "__main__":
     # fl = FoveationLoss([2,2])
     xes = torch.tensor(
-        [[0,0],
-         [1,0],
-         [0,1],
-         [1,1],
-         [-1,-1],
-         [2,0.5],
-         [-0.5,2],
-         [2,2],
-        ])
-    bbs = torch.tensor([[-1,1,-1,1]]*8)
+        [[0, 0],
+         [1, 0],
+         [0, 1],
+         [1, 1],
+         [-1, -1],
+         [2, 0.5],
+         [-0.5, 2],
+         [2, 2],
+         ])
+    bbs = torch.tensor([[-1, 1, -1, 1]]*8)
     # losses = fl(xes,bbs)
     # print(losses)
     # expected_losses = torch.tensor([[0,0,0,0,0,0.5,0.5,(2.0**0.5)/2]]).T
@@ -122,37 +126,37 @@ if __name__ == "__main__":
     # print(torch.allclose(losses, expected_losses))
     # # assert(torch.allclose(losses, expected_losses))
 
-    # test iou 
+    # test iou
     iou_loss = IntersectionOverUnionLoss()
     fixationbox = torch.cat([
-                    xes,
-                    torch.full_like(xes[...,0:1],2),
-                    torch.full_like(xes[...,0:1],2),
-                ],axis=-1)
+        xes,
+        torch.full_like(xes[..., 0:1], 2),
+        torch.full_like(xes[..., 0:1], 2),
+    ], axis=-1)
     pred_boxes = center_width_to_corners(fixationbox)
-    print(pred_boxes,bbs)
-    iou_loss(pred_boxes,bbs)
+    print(pred_boxes, bbs)
+    iou_loss(pred_boxes, bbs)
     for i in range(8):
         pred, actual = pred_boxes[i:i+1], bbs[i:i+1]
         print(pred, actual)
-        print(torchvision.ops.generalized_box_iou(pred,actual))
-        print(torchvision.ops.generalized_box_iou_loss(pred,actual))
-        print(iou_loss(pred,actual))
-
+        print(torchvision.ops.generalized_box_iou(pred, actual))
+        print(torchvision.ops.generalized_box_iou_loss(pred, actual))
+        print(iou_loss(pred, actual))
 
     logging.basicConfig(level=logging.INFO)
     iou_loss = IntersectionOverUnionLoss()
-    groundtruth_bbox = torch.tensor([[0.0,0.0,0.5,0.5]])
-    test_bbox = torch.tensor([[0.25,0.25,0.5,0.5]])
+    groundtruth_bbox = torch.tensor([[0.0, 0.0, 0.5, 0.5]])
+    test_bbox = torch.tensor([[0.25, 0.25, 0.5, 0.5]])
     loss = iou_loss(groundtruth_bbox, test_bbox)
     logging.info(f"1. Actual IoU Loss: {loss}, expected: about {0.25}")
 
-    groundtruth_bbox = torch.tensor([[0.0,0.0,0.5,0.5]])
-    test_bbox = torch.tensor([[0.0,0.0,0.5,0.5]])
+    groundtruth_bbox = torch.tensor([[0.0, 0.0, 0.5, 0.5]])
+    test_bbox = torch.tensor([[0.0, 0.0, 0.5, 0.5]])
     loss = iou_loss(groundtruth_bbox, test_bbox)
     logging.info(f"Actual IoU Loss: {loss}, expected: {1.0}")
 
-    groundtruth_bbox = torch.tensor([[0.0,0.0,0.5,0.5],[0.0,0.0,0.5,0.5]])
-    test_bbox = torch.tensor([[0.0,0.0,0.5,0.5],[0.0,0.0,0.5,0.5]])
+    groundtruth_bbox = torch.tensor(
+        [[0.0, 0.0, 0.5, 0.5], [0.0, 0.0, 0.5, 0.5]])
+    test_bbox = torch.tensor([[0.0, 0.0, 0.5, 0.5], [0.0, 0.0, 0.5, 0.5]])
     loss = iou_loss(groundtruth_bbox, test_bbox)
     logging.info(f"Actual IoU Loss: {loss}, expected: {2.0}")

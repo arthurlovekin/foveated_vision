@@ -13,6 +13,7 @@ from foveation_module import FoveationModule
 
 RESNET_DEFAULT_INPUT_SIZE = (224, 224)
 
+
 class PeripheralModel(nn.Module):
     """
     Creates a feature vector from a low-resolution background image
@@ -58,17 +59,21 @@ class FovealModel(nn.Module):
 
 # https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 # https://github.com/tatp22/multidim-positional-encoding for 2d and 3d positional encodings
+
+
 class PositionalEncoding(nn.Module):
     """
         d_model (int) – the number of expected features in the encoder/decoder inputs
         dropout (float) – the dropout probability
         max_len (int) – the maximum length of the input feature
     """
-    def __init__(self, d_model: int=512, dropout: float = 0.1, max_len: int = 8192):
+
+    def __init__(self, d_model: int = 512, dropout: float = 0.1, max_len: int = 8192):
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
         position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        div_term = torch.exp(torch.arange(0, d_model, 2)
+                             * (-math.log(10000.0) / d_model))
         position_encoding = torch.zeros(max_len, 1, d_model)
         position_encoding[:, 0, 0::2] = torch.sin(position * div_term)
         position_encoding[:, 0, 1::2] = torch.cos(position * div_term)
@@ -80,14 +85,15 @@ class PositionalEncoding(nn.Module):
         x = x + self.position_encoding[:x.size(0)]
         return self.dropout(x)
 
+
 class CombinerModel(nn.Module):
     """
     Takes buffers of foveal features, peripheral features, and fovea points, and
     combines them to produce a bounding box and new fixation point.
     """
 
-    def __init__(self, buffer_size=3, n_inputs: int=4098, n_heads: int=6,
-                 n_encoder_layers: int=3, dropout: float = 0.1, fixation_length=2):
+    def __init__(self, buffer_size=3, n_inputs: int = 4098, n_heads: int = 6,
+                 n_encoder_layers: int = 3, dropout: float = 0.1, fixation_length=2):
         """
         Args:
             buffer_size (int): Number of previous frames to consider
@@ -97,19 +103,22 @@ class CombinerModel(nn.Module):
             dropout (float): Dropout probability
         """
         super().__init__()
-        self.positional_encoding = PositionalEncoding(n_inputs,dropout)
-        self.transformer_encoder_layer = nn.TransformerEncoderLayer(d_model=n_inputs, nhead=n_heads, dim_feedforward=2048, dropout=dropout, batch_first=True)
-        self.transformer_model = nn.TransformerEncoder(encoder_layer=self.transformer_encoder_layer, num_layers=n_encoder_layers) # (contains multiple TransformerEncoderLayers)
+        self.positional_encoding = PositionalEncoding(n_inputs, dropout)
+        self.transformer_encoder_layer = nn.TransformerEncoderLayer(
+            d_model=n_inputs, nhead=n_heads, dim_feedforward=2048, dropout=dropout, batch_first=True)
+        # (contains multiple TransformerEncoderLayers)
+        self.transformer_model = nn.TransformerEncoder(
+            encoder_layer=self.transformer_encoder_layer, num_layers=n_encoder_layers)
         # Map the encoded sequence to a bounding box.
         # TODO: This could use a more advanced decoder
         self.sequence_dim = buffer_size*n_inputs
         self.bbox_head = nn.Sequential(
             nn.Linear(self.sequence_dim, 4),
-            nn.Sigmoid(), # make outputs 0-1
+            nn.Sigmoid(),  # make outputs 0-1
         )
         self.pos_head = nn.Sequential(
             nn.Linear(self.sequence_dim, fixation_length),
-            nn.Sigmoid(), # make outputs 0-1
+            nn.Sigmoid(),  # make outputs 0-1
         )
 
     def forward(self, all_features_buffer):
@@ -123,12 +132,14 @@ class CombinerModel(nn.Module):
         latent_seq = latent_seq.reshape((latent_seq.shape[0], -1))
         bbox = self.bbox_head(latent_seq)
         pos = self.pos_head(latent_seq)
-        return bbox, pos 
+        return bbox, pos
+
 
 class CombinerModelTimeSeriesTransformer(nn.Module):
     """Uses a pre-trained time-series transformer (Autoformer) to combine the features from
     the peripheral and foveal models.
     """
+
     def __init__(self):
         super().__init__()
         self.transformer = None
@@ -143,8 +154,9 @@ class CombinerModelTimeSeriesTransformer(nn.Module):
         """
         pass
 
+
 class PeripheralFovealVisionModel(nn.Module):
-    def __init__(self):#, batch_size=1):
+    def __init__(self):  # , batch_size=1):
         super().__init__()
         # self.batch_size = batch_size
         self.peripheral_resolution = RESNET_DEFAULT_INPUT_SIZE
@@ -152,27 +164,28 @@ class PeripheralFovealVisionModel(nn.Module):
             (self.peripheral_resolution[0], self.peripheral_resolution[1]),
             antialias=True,
         )
-        # self.feature_len = 2x2048 (resnet output) + 2 for center of fixation 
+        # self.feature_len = 2x2048 (resnet output) + 2 for center of fixation
         # TODO: Just output 4 points (centerx/y, dimensionsx/y) directly for the next fixation instead of 2
         self.fixation_length = 2
         self.buffer_len = 3
         self.foveation_module = FoveationModule(bound_crops=False)
         self.peripheral_model = PeripheralModel()
         self.foveal_model = FovealModel()
-        self.combiner_model = CombinerModel(fixation_length=self.fixation_length)
+        self.combiner_model = CombinerModel(
+            fixation_length=self.fixation_length)
         self.position_encoding = None
-        self.current_fixation = None 
-        self.buffer = None 
-    
+        self.current_fixation = None
+        self.buffer = None
+
     def reset(self):
-        # Need to detach then reattach the hidden variables of the model to prevent 
+        # Need to detach then reattach the hidden variables of the model to prevent
         # the gradient from propagating back in time
         # (Setting to none causes them to be reinitialized)
-        self.current_fixation = None 
+        self.current_fixation = None
         self.buffer = None
 
     def get_default_fovea_size(self):
-        return self.foveation_module.crop_width,self.foveation_module.crop_height
+        return self.foveation_module.crop_width, self.foveation_module.crop_height
 
     def forward(self, current_image):
         """
@@ -182,7 +195,8 @@ class PeripheralFovealVisionModel(nn.Module):
         # Initialize the current fixation if necessary
         if self.current_fixation is None:
             self.batch_size = current_image.shape[0]
-            self.current_fixation = torch.ones((self.batch_size, self.fixation_length), dtype=torch.float32, device=current_image.device)*0.5
+            self.current_fixation = torch.ones(
+                (self.batch_size, self.fixation_length), dtype=torch.float32, device=current_image.device)*0.5
 
         # Extract features from the peripheral image
         background_img = self.downsampler(current_image)
@@ -199,25 +213,28 @@ class PeripheralFovealVisionModel(nn.Module):
         logging.debug(f"Current fixation shape: {self.current_fixation.shape}")
 
         # Add the current fixation to the buffer
-        all_features = torch.cat([peripheral_feature, foveal_feature, self.current_fixation], dim=1)
+        all_features = torch.cat(
+            [peripheral_feature, foveal_feature, self.current_fixation], dim=1)
         logging.debug(f"All features shape: {all_features.shape}")
 
-        # Initialize the buffer if necessary 
+        # Initialize the buffer if necessary
         if self.buffer is None:
-            self.buffer = (torch.rand_like(all_features.unsqueeze(1).expand(-1,self.buffer_len,-1), dtype=torch.float32, device=current_image.device)-0.5)*0.1
-        
-        temp_buffer = torch.cat([all_features.unsqueeze(1), self.buffer], dim=1)
+            self.buffer = (torch.rand_like(all_features.unsqueeze(
+                1).expand(-1, self.buffer_len, -1), dtype=torch.float32, device=current_image.device)-0.5)*0.1
+
+        temp_buffer = torch.cat(
+            [all_features.unsqueeze(1), self.buffer], dim=1)
         logging.debug(f"Temp buffer shape: {temp_buffer.shape}")
         self.buffer = temp_buffer[:, :self.buffer_len, :]
         logging.debug(f"Buffer shape: {self.buffer.shape}")
 
         bbox, next_fixation = self.combiner_model(self.buffer)
         self.current_fixation = next_fixation.detach()
-        return bbox, next_fixation 
+        return bbox, next_fixation
 
 
 if __name__ == "__main__":
-    batch_size=5
+    batch_size = 5
     test_input = torch.randn(batch_size, 3, 224, 224)
     logging.basicConfig(level=logging.INFO)
     logging.info(f"Test input shape: {test_input.shape}")
@@ -231,4 +248,3 @@ if __name__ == "__main__":
     logging.info(f"    bbox: {bbox}")
     logging.info(f"    Current fixation shape {fixation.shape}")
     logging.info(f"    fixation: {fixation}")
-
