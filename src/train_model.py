@@ -52,12 +52,12 @@ random_seed = 1
 torch.backends.cudnn.enabled = False
 torch.manual_seed(random_seed)
 
-train_loader = get_dataloader(
-    batch_size=batch_size_train, targ_size=(224, 224), clip_length_s=clip_length_s_train
-)
-test_loader = get_dataloader(
-    batch_size=batch_size_test, targ_size=(224, 224), clip_length_s=clip_length_s_test
-)
+# train_loader = get_dataloader(
+#     batch_size=batch_size_train, targ_size=(224, 224), clip_length_s=clip_length_s_train,
+# )
+# test_loader = get_dataloader(
+#     batch_size=batch_size_test, targ_size=(224, 224), clip_length_s=clip_length_s_test)
+train_loader, test_loader = get_train_test_dataloaders(batch_size=batch_size_train,targ_size=(224, 224),clip_length_s=clip_length_s_train)
 
 # Load the model
 model = PeripheralFovealVisionModel()

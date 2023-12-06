@@ -1,6 +1,7 @@
 import logging
 from os import path as Path
 
+import random
 import torch
 import time
 import torchvision
@@ -91,7 +92,7 @@ class VotDataset(Dataset):
 
 
 class NonNullVotDataset(Dataset):
-    def __init__(self, dataset_name='longterm',targ_size = (650,650),clip_secs:int = 5):
+    def __init__(self,filter_set = None, dataset_name='longterm',targ_size = (650,650),clip_secs:int = 5):
         # get list of video sequences:
         self.basedir = directories[dataset_name]
         self.seq_len = int(clip_secs * 30)
@@ -105,6 +106,8 @@ class NonNullVotDataset(Dataset):
 
         self.videos = []
         for videoname in videonames:
+            if filter_set is not None and videoname not in filter_set: 
+                continue
             viddir = Path.join(self.basedir,'sequences',videoname)
             
             with open(Path.join(viddir,'groundtruth.txt'),'r') as file: 
@@ -112,6 +115,8 @@ class NonNullVotDataset(Dataset):
             vid_segs = self._get_nonnull_segments(nonnulls,self.seq_len)
             self.videos.extend((videoname,startpoint) for startpoint in vid_segs)
             
+    def get_names(self): 
+        return self.videos
     
     @staticmethod
     def _get_nonnull_segments(nonnulls,target_nframes):
@@ -160,11 +165,43 @@ class NonNullVotDataset(Dataset):
     def __getitem__(self,idx):
         return self.get_vid(idx)
 
+def get_train_test_dataloaders(test_split=0.2,targ_size = None,batch_size=3, clip_length_s=5, shuffle=True, seed = None, **loader_kwargs): 
+    if seed is None: 
+        seed = int(time.time()*1000)
+        logging.info(f'Dataloader has seed:{seed}')
+    random.seed(seed)
+    gen = torch.Generator()
+    gen.manual_seed(seed)
+
+    base_ds = NonNullVotDataset()
+    base_ds_videos = base_ds.get_names()
+    names = list(set(name_vid[0] for name_vid in base_ds_videos))
+    random.shuffle(names)
+    n_test_names = int(len(names) * test_split)
+    test_names,train_names = names[:n_test_names], names[n_test_names:]
+    logging.info(f'train has {len(train_names)} sources; test has {len(test_names)} sources')
+    logging.debug(f'train split has videos: {train_names}')
+    logging.debug(f'train split has videos: {test_names}')
+
+    train_ds = NonNullVotDataset(targ_size=targ_size, clip_secs=clip_length_s,filter_set = train_names)
+    test_ds = NonNullVotDataset(targ_size=targ_size, clip_secs=clip_length_s,filter_set = test_names)
+    logging.info(f'train has {len(train_ds)} samples; test has {len(test_ds)} samples')
+
+    if 'generator' not in loader_kwargs: 
+        loader_kwargs['generator'] = gen
+    train_dl = DataLoader(train_ds,batch_size=batch_size,shuffle=shuffle,**loader_kwargs,collate_fn=None)
+    if 'generator' not in loader_kwargs: 
+        gen = torch.Generator()
+        gen.manual_seed(seed)
+        loader_kwargs['generator'] = gen
+    test_dl = DataLoader(test_ds,batch_size=batch_size,shuffle=shuffle,**loader_kwargs,collate_fn=None)
+    return train_dl, test_dl 
 
 def get_dataloader(nullish_dataset=False, dataset_name='longterm',targ_size = None,batch_size=3, clip_length_s=5, shuffle=True, seed = None,**loader_kwargs):
     collate_fn = None
     if seed is None: 
         seed = int(time.time()*1000)
+        logging.info(f'Dataloader has seed:{seed}')
         # print(seed)
     if nullish_dataset: 
         ds = VotDataset(dataset_name=dataset_name,targ_size=targ_size, clip_secs=clip_length_s)
@@ -172,8 +209,8 @@ def get_dataloader(nullish_dataset=False, dataset_name='longterm',targ_size = No
         ds = NonNullVotDataset(dataset_name=dataset_name,targ_size=targ_size, clip_secs=clip_length_s)
     if 'generator' not in loader_kwargs: 
         gen = torch.Generator()
+        gen.manual_seed(seed)
         loader_kwargs['generator'] = gen
-    gen.manual_seed(seed)
     return DataLoader(ds,batch_size=batch_size,shuffle=shuffle,**loader_kwargs,collate_fn=collate_fn)
     
 if __name__ == "__main__": 
@@ -186,19 +223,13 @@ if __name__ == "__main__":
     print(len(VotDataset()))
     print(len(ds))
     img, key = ds[4]
-    for i in [1, 394, 123, 679,34,987,234,876]: 
-        ds[i]
+
     print(img.shape)
     print(key.shape)
     # print(img, key)
     # print(f"Labels: {key}")
 
-    dl = get_dataloader(targ_size=(650,650))
-    print(dl.generator.initial_seed())
-    time.sleep(1)
-    dl2 = get_dataloader(targ_size=(650,650))
-    print(dl2.generator.initial_seed())
-
+    train_dl, test_dl = get_train_test_dataloaders(seed = 73)
     # for i,loaded in tqdm(enumerate(dl),total=len(ds)): 
         
     #     if i %100: 
