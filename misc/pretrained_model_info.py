@@ -1,10 +1,10 @@
 import torch
 from torch import nn
 from torchvision.models import resnet50, ResNet50_Weights
+from torchvision.models.detection import ssdlite320_mobilenet_v3_large, SSDLite320_MobileNet_V3_Large_Weights
 from torchvision.transforms import Resize
 from torchinfo import summary
 # from peripheral_foveal_vision_model import PeripheralModel, FovealModel, CombinerModel
-from transformers import TimeSeriesTransformerConfig, TimeSeriesTransformerModel
 """
 the thing is that transformers expect to generate a sequence of the same type (eg. bounding boxes))
 However in our implementation we are taking in features from the peripheral and foveal images, plus the previous fixation (or bounding box)
@@ -13,28 +13,21 @@ We could make the transformer predict both the next image features and the next 
 and then have a loss between the transformer's predicted features and the actual next features in addition to the loss on the bounding box itself.
 
 """
-# Initializing a Time Series Transformer configuration with 12 time steps for prediction
-prediction_length = 1
-context_length = 16
-configuration = TimeSeriesTransformerConfig(prediction_length=12)
 
-# Randomly initializing a model (with random weights) from the configuration
-model = TimeSeriesTransformerModel(configuration)
-
-# # Accessing the model configuration
-# configuration = model.config
-
+model = ssdlite320_mobilenet_v3_large(weights=SSDLite320_MobileNet_V3_Large_Weights.DEFAULT)
 
 # # weights = ResNet50_Weights.IMAGENET1K_V2
 # # model = resnet50(weights=weights)
 # model = PeripheralModel()
 # print(model)
 print(summary(model))
-
-test_input = torch.randn(3, 3, 420,420) # (batch, channels, height, width)
-
-past_time_features = torch.randn(3, 2048*2+4, 12) # (batch, channels, time_steps)
-print(model(test_input).shape)
+model.eval()
+test_input = torch.randn(2, 3, 420,420) # (batch, channels, height, width)
+output = model(test_input)
+print(f"Output is a list of length batch_size: {len(output)}") 
+print(f"Each list element is a dict with fields {output[0].keys()}") #['boxes', 'scores', 'labels']
+print(f"boxes: {output[0]['boxes']}")
+print(f"labels: {output[0]['labels']}")
 
 
 
