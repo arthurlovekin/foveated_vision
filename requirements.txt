@@ -2,3 +2,4 @@ tensorboard==2.15.1
 protobuf==3.20.* # Needed for tensorboard
 torchinfo==1.8.0
 tqdm==4.66.1
+got10k==0.1.3

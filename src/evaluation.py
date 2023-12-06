@@ -1,6 +1,7 @@
 from got10k.trackers import Tracker
 from got10k.experiments import ExperimentGOT10k
-#pip3 install got10k
+# pip3 install got10k
+# https://github.com/got-10k/toolkit
 class IdentityTracker(Tracker):
     def __init__(self):
         super(IdentityTracker, self).__init__(name='IdentityTracker')
