@@ -57,9 +57,6 @@ def make_bbox_grid(images, bboxes, gt_bboxes=[], decimation=5):
         image = TF.convert_image_dtype(images[i][batch_ind, :, :, :], dtype=torch.uint8)
         # Requires a dimension to possibly display multiple bounding boxes
         bbox = bboxes[i][batch_ind, :].unsqueeze(0)
-        print('\n\n\n')
-
-        print(bbox)
         # Convert bounding boxes from [0, 1] range to image coordinates
         bbox = bbox_to_img_coords(bbox, image) # Also clips to image dimensions
         bb_to_draw = None
@@ -88,9 +85,10 @@ def bbox_valid(bbox):
     """
     Check if a bounding box is valid (i.e. has a width and height > 0)
     bbox: [batch]x 4 tensor [xlow, xhigh, ylow,yhigh]
+    Assume batch dimension is 1 (just one bounding box)
     """
-    # Check that for all batch elements, xhigh > xlow and yhigh > ylow
-    all_valid = torch.all(bbox[...,0:1] < bbox[...,1:2],dim=-1) & torch.all(bbox[...,2:3] < bbox[...,3:4],dim=-1)
+    bbox = bbox[0, ...]
+    all_valid = bbox[0] < bbox[2] and bbox[1] < bbox[3]
     return all_valid
     
 def fix_fovea_if_needed(fixations,default_shape):
@@ -106,7 +104,6 @@ def fix_fovea_if_needed(fixations,default_shape):
 def cwh_perc_to_pixel_xyxy(bbox,image_shape,default_fovea_shape=[0.25,0.25]):
         bbox = fix_fovea_if_needed(bbox,default_shape=default_fovea_shape)
         bbox = center_width_to_corners(bbox)
-        # print(bbox)
         bbox[...,0:2] = torch.clamp(bbox[...,0:2] * image_shape[-2], 0, image_shape[-2])
         bbox[...,2:4] = torch.clamp(bbox[...,2:4] * image_shape[-1], 0, image_shape[-1])
 
