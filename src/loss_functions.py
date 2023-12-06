@@ -60,7 +60,7 @@ class IntersectionOverUnionLoss:
             loss = 1.0*batch_size - torch.sum(torch.diag(torchvision.ops.box_iou(box1, box2)))
         # warn if loss is nan
         if loss != loss: 
-            logging.warning(f"NaN loss, box1: {box1}, box2: {box2}")
+            logging.warning(f"NaN IoU loss, box1: {box1}, box2: {box2}")
         # # warn if one box has no area
         # if torch.abs(box1[...,2:4] - box1[..., 0:2]) <= torch.ones_like(box1[...,2:4])*self.min_sidelength_threshold:
         #     logging.warning(f"Box1 has no area: {box1}")
