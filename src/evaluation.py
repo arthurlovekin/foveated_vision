@@ -42,14 +42,23 @@ class FoveatedVisionTracker(Tracker):
         self.model.reset()
         with torch.no_grad():
             image_tensor = self.transform_PIL_image(image)
+            self.image_shape = image_tensor.shape
             self.model(image_tensor)
     
     def update(self, image):
         with torch.no_grad():
             image_tensor = self.transform_PIL_image(image)
             bbox, next_fixation = self.model(image_tensor)
+            bbox_GOT10k = transform_bboxes(bbox, self.image_shape)
             return bbox.detach().cpu()
 
+    def transform_bboxes(self, bboxes, image_shape)
+    """ Convert an Nx4 tensor of 0-1 fractions [xmin, ymin, xmax, ymax]
+    into GOT10k standard [xmin, ymin, width, height] (in pixels)"""
+        pass
+
+
+# TODO: do I need a separate Tracker for VOT and GOT10k? 
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
