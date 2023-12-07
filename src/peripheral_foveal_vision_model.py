@@ -168,9 +168,8 @@ class CombinerModelTimeSeriesTransformer(nn.Module):
 
 
 class PeripheralFovealVisionModel(nn.Module):
-    def __init__(self):  # , batch_size=1):
+    def __init__(self):
         super().__init__()
-        # self.batch_size = batch_size
         self.peripheral_resolution = RESNET_DEFAULT_INPUT_SIZE
         self.downsampler = Resize(
             (self.peripheral_resolution[0], self.peripheral_resolution[1]),
@@ -203,6 +202,8 @@ class PeripheralFovealVisionModel(nn.Module):
         Args:
             current_image (torch.tensor): (batch, channels, height, width) image
         """
+        if len(current_image.shape) == 3: 
+            current_image.unsqueeze(0)
         # Initialize the current fixation if necessary
         if self.current_fixation is None:
             self.batch_size = current_image.shape[0]
@@ -252,7 +253,7 @@ class PeripheralFovealVisionModel(nn.Module):
         bbox, next_fixation = self.combiner_model(self.buffer)
 
         self.current_fixation = next_fixation
-        return bbox, next_fixation
+        return torch.squeeze(bbox, dim=0), torch.squeeze(next_fixation, dim=0)
 
 
 if __name__ == "__main__":
