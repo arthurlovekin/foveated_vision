@@ -127,13 +127,15 @@ class PeripheralFovealVisionModelLoss:
 
         if self.mse_weight != 0.0:
             mse_loss = self.mse_loss(curr_bbox, true_curr_bbox)
+        else:
+            mse_loss = 0.0
         if self.mse_fovea_weight != 0.0:
             mse_fovea_loss = self.mse_loss(
                 fix_fovea_if_needed(next_fixation,
                                     (self.default_height, self.default_width)),
                 true_next_bbox)  
         else:
-            mse_loss = 0.0
+            mse_fovea_loss = 0.0
         if self.iou_weight != 0.0:
             iou_loss = self.iou_loss(curr_bbox, true_curr_bbox)
         else:
