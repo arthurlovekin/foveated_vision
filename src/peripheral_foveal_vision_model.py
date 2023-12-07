@@ -205,6 +205,7 @@ class PeripheralFovealVisionModel(nn.Module):
         if len(current_image.shape) == 3: 
             current_image = current_image.unsqueeze(0)
         assert len(current_image.shape) == 4, f"Expected batched image input, but current shape is {current_image.shape} (if shape length was 3, dim 0 was unsqeezed)"
+
         # Initialize the current fixation if necessary
         if self.current_fixation is None:
             self.batch_size = current_image.shape[0]
@@ -217,10 +218,17 @@ class PeripheralFovealVisionModel(nn.Module):
                 * 0.5
             )
 
+        # TODO: calls to foveal and peripheral models are consuming memory that is not being cleared.
+        used_memory = torch.cuda.memory_allocated() / 1024**3 # Get free CUDA memory in GiB
+        logging.debug(f"Current used CUDA memory: {used_memory:0.2f}GB")
+
         # Extract features from the peripheral image
         background_img = self.downsampler(current_image)
         peripheral_feature = self.peripheral_model(background_img)
         logging.debug(f"Peripheral feature shape: {peripheral_feature.shape}")
+
+        used_memory = torch.cuda.memory_allocated() / 1024**3 # Get free CUDA memory in GiB
+        logging.debug(f"Current used CUDA memory: {used_memory:0.2f}GB")
 
         # Extract features from the foveal patch
         foveal_patch = self.foveation_module(self.current_fixation, current_image)
@@ -228,6 +236,9 @@ class PeripheralFovealVisionModel(nn.Module):
         foveal_feature = self.foveal_model(foveal_patch)
         logging.debug(f"Foveal feature shape: {foveal_feature.shape}")
         logging.debug(f"Current fixation shape: {self.current_fixation.shape}")
+
+        used_memory = torch.cuda.memory_allocated() / 1024**3 # Get free CUDA memory in GiB
+        logging.debug(f"Current used CUDA memory: {used_memory:0.2f}GB")
 
         # Add the current fixation to the buffer
         all_features = torch.cat(
