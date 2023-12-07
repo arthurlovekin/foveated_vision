@@ -81,13 +81,13 @@ class GOT10kDataset(Dataset):
         Returns:
             image_sequence: (torch.Tensor) of shape (frames_per_sequence, 3, ?, ?)
             label_sequence: (torch.Tensor) of shape (frames_per_sequence, 4)
-                where the 4 labels correspond to bounding box corners (x1, y1, x2, y2)
+                where the 4 labels correspond to bounding box corners [xmin, ymin, width, height]
         """
         # ## Method 1: Load entire videos with whatever resolution and length they have
         # video_dir = os.path.join(self.base_dir, self.video_filenames[idx].strip())
 
         # # Load ground Truth labels
-        # # Each line of this file is a sequence of 4 floats, separated by commas: x1, y1, x2, y2        
+        # # Each line of this file is a sequence of 4 floats, separated by commas: [xmin, ymin, width, height]     
         # with open(os.path.join(video_dir,'groundtruth.txt'),'r') as file: 
         #     ground_truth = torch.tensor([[float(x) for x in line.split(',')] for line in file.readlines() if len(line) != 0])
 
@@ -106,7 +106,7 @@ class GOT10kDataset(Dataset):
         end_idx = (sample_idx+1)*self.frames_per_sequence
         
         # Load ground Truth labels
-        # Each line of this file is a sequence of 4 floats, separated by commas: x1, y1, x2, y2
+        # Each line of this file is a sequence of 4 floats, separated by commas: [xmin, ymin, width, height]
         with open(os.path.join(video_dir,'groundtruth.txt'),'r') as file:
             ground_truth = torch.tensor([[float(x) for x in line.split(',')] for line in file.readlines() if len(line) != 0])
             ground_truth = ground_truth[start_idx:end_idx,:]
@@ -116,7 +116,7 @@ class GOT10kDataset(Dataset):
         image_sequence = torch.zeros([self.frames_per_sequence] + list(first_img.shape))
         for i in range(self.frames_per_sequence):
             image_path = os.path.join(video_dir, f'{start_idx + i+1:08d}.jpg') # add 1 because the first image is 00000001.jpg
-            image_sequence[i] = self.resize(read_image(image_path)) / 255.0 # Normalize
+            image_sequence[i] = self.resize(read_image(image_path)) / 255.0 # Normalize (TODO: should be handled by dataloader transforms)
 
         return image_sequence, ground_truth
 
