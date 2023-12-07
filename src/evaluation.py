@@ -4,6 +4,7 @@ import torch
 from peripheral_foveal_vision_model import PeripheralFovealVisionModel
 from torchvision.io import read_image
 import logging
+from torchvision.transforms import PILToTensor
 # pip3 install got10k
 # https://github.com/got-10k/toolkit
 class IdentityTracker(Tracker):
@@ -27,19 +28,26 @@ class FoveatedVisionTracker(Tracker):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
         self.model.eval()
-        logging.info(f"Loaded model. Device: {self.device} Filepath: {self.model_filepath}")
+        logging.info(f"Loaded Tracker model. Device: {self.device} Filepath: {self.model_filepath}")
+        self.transform = PILToTensor()
+
+    def transform_PIL_image(self, PIL_image):
+        image_tensor = self.transform(PIL_image).float().to(self.device)
+        return image_tensor
 
     def init(self, image, box):
         # TODO: should our model take in the starting bounding box as well?
-        self.model(read_image(image))
+        image_tensor = self.transform_PIL_image(image)
+        self.model(image_tensor)
     
     def update(self, image):
-        bbox, next_fixation = self.model(image)
-        return bbox
+        image_tensor = self.transform_PIL_image(image)
+        bbox, next_fixation = self.model(image_tensor)
+        return bbox.detach().cpu()
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     # setup tracker
     # model_filepath = r'/home/alovekin/foveated_vision/models/20231206_185942_model_epoch_2_step_3760.pth'
     model_filepath_base = r'./models/'

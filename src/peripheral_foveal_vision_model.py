@@ -203,7 +203,8 @@ class PeripheralFovealVisionModel(nn.Module):
             current_image (torch.tensor): (batch, channels, height, width) image
         """
         if len(current_image.shape) == 3: 
-            current_image.unsqueeze(0)
+            current_image = current_image.unsqueeze(0)
+        assert len(current_image.shape) == 4, f"Expected batched image input, but current shape is {current_image.shape} (if shape length was 3, dim 0 was unsqeezed)"
         # Initialize the current fixation if necessary
         if self.current_fixation is None:
             self.batch_size = current_image.shape[0]
