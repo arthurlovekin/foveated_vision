@@ -202,7 +202,6 @@ def get_dataloader(nullish_dataset=False, dataset_name='longterm',targ_size = No
     if seed is None: 
         seed = int(time.time()*1000)
         logging.info(f'Dataloader has seed:{seed}')
-        # print(seed)
     if nullish_dataset: 
         ds = VotDataset(dataset_name=dataset_name,targ_size=targ_size, clip_secs=clip_length_s)
     else: 
