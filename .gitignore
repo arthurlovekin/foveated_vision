@@ -169,3 +169,6 @@ runs/
 # where we save the models
 models/
 out/
+src/results/
+results/
+reports/

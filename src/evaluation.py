@@ -1,5 +1,5 @@
 from got10k.trackers import Tracker
-from got10k.experiments import ExperimentGOT10k
+from got10k.experiments import ExperimentGOT10k, ExperimentVOT
 import torch
 from peripheral_foveal_vision_model import PeripheralFovealVisionModel
 from torchvision.io import read_image
@@ -59,14 +59,24 @@ if __name__ == '__main__':
     model_filepath = model_filepath_base + r'20231206_185942_model_epoch_2_step_3760.pth'
     tracker = FoveatedVisionTracker(model_filepath)
 
+    # # run experiments on VOT
+    # logging.info('Running experiments on VOT')
+    # experiment = ExperimentVOT(
+    #     root_dir=r'/scratch/eecs542s001f23_class_root/eecs542s001f23_class/shared_data/group_raz/data/vot/longterm/sequences',
+    #     subset='val', #note that 'test' ground-truth is withheld
+    #     result_dir='results',
+    #     report_dir='reports')
+    # experiment.run(tracker, visualize=False)
+
     # run experiments on GOT-10k (validation subset)
     logging.info('Running experiments on GOT-10k (validation subset)...')
     experiment = ExperimentGOT10k(
         root_dir=r'/scratch/engin_root/engin1/shared_data/group_raz/data/got10k',
-        subset='val', #note that test ground-truth is withheld
+        subset='val', #note that 'test' ground-truth is withheld
         result_dir='results',
         report_dir='reports')
     experiment.run(tracker, visualize=False)
 
     # report performance
     experiment.report([tracker.name])
+
