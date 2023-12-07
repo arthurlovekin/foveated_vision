@@ -11,7 +11,8 @@ On Great Lakes, you may see the message `Defaulting to user installation because
 To run Tensorboard, first make sure it is installed `pip install tensorboard`.  
 Then, you can run at the command line: `tensorboard --logdir runs/`.  
 
-On Great Lakes, you will need to use `python3 -m tensorboard.main --logdir runs/`
+On Great Lakes, you will need to use `python3 -m tensorboard.main --logdir runs/`. If you have run `setup.sh`, this is available as an alias; just run `tensorboard`.
+
 This will start a webserver (e.g. at `http://localhost:6016/`) with information about your training.  
 
 If the Python extension is installed, VSCode will offer some built-in Tensorboard support. The displayed in-line quick-start button may not work with Great Lakes, since the Python module must first be loaded (see Setup).

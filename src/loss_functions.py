@@ -5,6 +5,7 @@ import torchvision
 from torch import nn
 
 from utils import center_width_to_corners
+from utils import fix_fovea_if_needed
 
 # TODO: Could make all loss functions nn.Modules if they contain learnable parameters
 # (just swap out the __call__ for a forward method, and add (nn.Module) after the class name)
@@ -86,7 +87,7 @@ class IntersectionOverUnionLoss:
 
 
 class PeripheralFovealVisionModelLoss:
-    def __init__(self, default_fovea_shape=(None, None)):
+    def __init__(self, default_fovea_shape=(0.25, 0.25)):
         self.mse_loss = nn.MSELoss()
         self.iou_loss = IntersectionOverUnionLoss(
             mode="complete"
@@ -94,7 +95,8 @@ class PeripheralFovealVisionModelLoss:
         self.foveation_loss = FoveationLoss(
             (224, 224)
         )  # TODO: Make this independent of the image size?
-        self.mse_weight = 1.0
+        self.mse_fovea_weight = 0.0  # On bounding box of next fixation vs the true next bounding box
+        self.mse_weight = 1.0  # On predicted bounding box
         self.iou_weight = 0.0  # WARNING: setting this to 1 is breaking things
         self.foveation_weight = 0.0
         self.default_width, self.default_height = default_fovea_shape
@@ -127,22 +129,27 @@ class PeripheralFovealVisionModelLoss:
             mse_loss = self.mse_loss(curr_bbox, true_curr_bbox)
         else:
             mse_loss = 0.0
-
+        if self.mse_fovea_weight != 0.0:
+            mse_fovea_loss = self.mse_loss(
+                fix_fovea_if_needed(next_fixation,
+                                    (self.default_height, self.default_width)),
+                true_next_bbox)  
+        else:
+            mse_fovea_loss = 0.0
         if self.iou_weight != 0.0:
             iou_loss = self.iou_loss(curr_bbox, true_curr_bbox)
         else:
             iou_loss = 0.0
-
         if self.foveation_weight != 0.0:
-            # TODO: Just output 4 points directly from the model
+            # TODO: Just output 4 points directly from the model?
             fixation_bbox = self.fix_fovea_if_needed(next_fixation)
             fovea_corner_parametrization = center_width_to_corners(fixation_bbox)
             foveation_loss = self.iou_loss(fovea_corner_parametrization, true_next_bbox)
         else:
             foveation_loss = 0.0
-
         return (
             self.mse_weight * mse_loss
+            + self.mse_fovea_weight * mse_fovea_loss
             + self.iou_weight * iou_loss
             + self.foveation_weight * foveation_loss
         )
