@@ -31,9 +31,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 num_epochs = 3
 batch_size_train = 8
-batch_size_test = 10
+batch_size_test = 15
 learning_rate = 0.00001
-momentum = 0.5
+momentum = 0.7
 clip_length_s_train = 0.25
 clip_length_s_test = 1
 save_model = True
@@ -52,12 +52,18 @@ random_seed = 1
 torch.backends.cudnn.enabled = False
 torch.manual_seed(random_seed)
 
+# Set up Tensorboard logging
+writer = SummaryWriter(flush_secs=2)
+
 # train_loader = get_dataloader(
 #     batch_size=batch_size_train, targ_size=(224, 224), clip_length_s=clip_length_s_train,
 # )
 # test_loader = get_dataloader(
 #     batch_size=batch_size_test, targ_size=(224, 224), clip_length_s=clip_length_s_test)
-train_loader, test_loader = get_train_test_dataloaders(batch_size=batch_size_train,targ_size=(224, 224),clip_length_s=clip_length_s_train)
+seed = int(time.time()*1000)
+# Save seed to tensorboard
+writer.add_scalar("Dataloader/seed", seed, 0)
+train_loader, test_loader = get_train_test_dataloaders(batch_size=batch_size_train,targ_size=(224, 224),clip_length_s=clip_length_s_train, seed=seed)
 
 # Load the model
 model = PeripheralFovealVisionModel()
@@ -77,8 +83,6 @@ foveation_loss.foveation_weight = 0.0  # TODO: Remove this, just for testing
 ce_loss = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-# Set up Tensorboard logging
-writer = SummaryWriter(flush_secs=2)
 # Show a batch of images
 images, labels = next(iter(train_loader))
 # images = images[0, :, :, :, :]  # Remove the batch dimension so we can display an entire sequence
@@ -298,13 +302,14 @@ for epoch in range(num_epochs):
         if step % test_frequency == 0:
             test_loss = test(model, test_loader, foveation_loss, step).item()
             better = test_loss < best_test_loss
+            logging.info(f"New test loss: {test_loss:.4f}; best test loss: {best_test_loss:.4f}; better: {better}")
             if better and save_model and step % save_frequency == 0 and step != 0:
-                logging.info(f"New best test loss: {test_loss:.4f}")
+                logging.info(f"Saving model.")
                 best_test_loss = test_loss
                 # Save model checkpoint
                 date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
                 model_path = os.path.join(
-                    model_dir, f"{date_str}_model_epoch_{epoch+1}_step_{step}.pth"
+                    model_dir, f"{date_str}_model_epoch_{epoch+1}_step_{step}_{best_test_loss:.6f}.pth"
                 )
                 torch.save(model.state_dict(), model_path)
             model.train()  # Set back to train mode

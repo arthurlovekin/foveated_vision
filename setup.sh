@@ -3,3 +3,4 @@ module load python/3.10.4
 module load pytorch/2.0.1
 module load scipy
 pip install -r requirements.txt
+alias tensorboard='python3 -m tensorboard.main --logdir=runs/'
