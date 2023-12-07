@@ -298,8 +298,9 @@ for epoch in range(num_epochs):
         if step % test_frequency == 0:
             test_loss = test(model, test_loader, foveation_loss, step).item()
             better = test_loss < best_test_loss
+            logging.info(f"New test loss: {test_loss:.4f}; best test loss: {best_test_loss:.4f}; better: {better}")
             if better and save_model and step % save_frequency == 0 and step != 0:
-                logging.info(f"New best test loss: {test_loss:.4f}")
+                logging.info(f"Saving model.")
                 best_test_loss = test_loss
                 # Save model checkpoint
                 date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
