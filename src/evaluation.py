@@ -25,7 +25,7 @@ class FoveatedVisionTracker(Tracker):
         self.model_filepath = model_filepath
         self.model = PeripheralFovealVisionModel()
         self.model.load_state_dict(torch.load(self.model_filepath))
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #torch.device("cpu") #
         self.model.to(self.device)
         self.model.eval()
         logging.info(f"Loaded Tracker model. Device: {self.device} Filepath: {self.model_filepath}")
