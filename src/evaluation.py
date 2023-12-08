@@ -48,7 +48,7 @@ class FoveatedVisionTracker(Tracker):
         with torch.no_grad():
             image_tensor = self.transform_PIL_image(image)
             bbox, next_fixation = self.model(image_tensor)
-            bbox_GOT10k = self.transform_bboxes(bbox, self.image_shape)
+            bbox_GOT10k = self.transform_bboxes(bbox, image_tensor)
             return bbox_GOT10k
 
     def transform_bboxes(self, bbox, image):

@@ -59,14 +59,16 @@ def bbox_to_img_coords(bbox, image):
     Also ensure that the bounding box is within the image bounds and
     clip if necessary.
     Args:
-        bbox (torch.tensor): (batch, 4) bounding box
-        image (torch.tensor): (channels, height, width) image
+        bbox (torch.tensor): (batch, 4) or (4) bounding box
+        image (torch.tensor): (batch, channels, height, width) or (channels, height, width) image
     """
     # Convert each corner and clip to image bounds
-    bbox[:, 0] = torch.clamp(bbox[:, 0] * image.shape[2], min=0, max=image.shape[2])
-    bbox[:, 1] = torch.clamp(bbox[:, 1] * image.shape[1], min=0, max=image.shape[1])
-    bbox[:, 2] = torch.clamp(bbox[:, 2] * image.shape[2], min=0, max=image.shape[2])
-    bbox[:, 3] = torch.clamp(bbox[:, 3] * image.shape[1], min=0, max=image.shape[1])    
+    img_width = image.shape[-1]
+    img_height = image.shape[-2]
+    bbox[..., 0:1] = torch.clamp(bbox[..., 0:1] * img_width, min=0, max=img_width)
+    bbox[..., 1:2] = torch.clamp(bbox[..., 1:2] * img_height, min=0, max=img_height)
+    bbox[..., 2:3] = torch.clamp(bbox[..., 2:3] * img_width, min=0, max=img_width)
+    bbox[..., 3: ] = torch.clamp(bbox[..., 3: ] * img_height, min=0, max=img_height)    
     return bbox
 
 def make_bbox_grid(images, bboxes, gt_bboxes=[], decimation=5):

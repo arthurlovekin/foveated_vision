@@ -112,7 +112,7 @@ class GOT10kDataset(Dataset):
             ground_truth = ground_truth[start_idx:end_idx,:]
         
         # Format the image sequence into the correct resolution and length
-        first_img = self.resize(read_image(os.path.join(video_dir,f'{1:08d}.jpg')))
+        first_img = self.resize(read_image(os.path.join(video_dir,f'{1:08d}.jpg'))) # (C,H,W)
         image_sequence = torch.zeros([self.frames_per_sequence] + list(first_img.shape))
         for i in range(self.frames_per_sequence):
             image_path = os.path.join(video_dir, f'{start_idx + i+1:08d}.jpg') # add 1 because the first image is 00000001.jpg
