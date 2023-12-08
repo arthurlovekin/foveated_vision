@@ -5,6 +5,7 @@ from peripheral_foveal_vision_model import PeripheralFovealVisionModel
 from torchvision.io import read_image
 import logging
 from torchvision.transforms import PILToTensor
+from utils import bbox_to_img_coords, corners_to_corners_width
 # pip3 install got10k
 # https://github.com/got-10k/toolkit
 class IdentityTracker(Tracker):
@@ -31,8 +32,6 @@ class FoveatedVisionTracker(Tracker):
         logging.info(f"Loaded Tracker model. Device: {self.device} Filepath: {self.model_filepath}")
         self.transform = PILToTensor()
 
-        self.count = 0 # TODO: remove
-
     def transform_PIL_image(self, PIL_image):
         image_tensor = self.transform(PIL_image).float().to(self.device)
         return image_tensor
@@ -49,13 +48,18 @@ class FoveatedVisionTracker(Tracker):
         with torch.no_grad():
             image_tensor = self.transform_PIL_image(image)
             bbox, next_fixation = self.model(image_tensor)
-            bbox_GOT10k = transform_bboxes(bbox, self.image_shape)
-            return bbox.detach().cpu()
+            bbox_GOT10k = self.transform_bboxes(bbox, self.image_shape)
+            return bbox_GOT10k
 
-    def transform_bboxes(self, bboxes, image_shape)
-    """ Convert an Nx4 tensor of 0-1 fractions [xmin, ymin, xmax, ymax]
-    into GOT10k standard [xmin, ymin, width, height] (in pixels)"""
-        pass
+    def transform_bboxes(self, bbox, image):
+        """ Convert an Nx4 tensor of 0-1 fractions [xmin, ymin, xmax, ymax]
+        into GOT10k standard [xmin, ymin, width, height] (in pixels), 
+        detached and on CPU
+        """
+        img_coords = bbox_to_img_coords(bbox, image)
+        bbox_corners_width = corners_to_corners_width(img_coords)
+        return bbox_corners_width.detach().cpu()
+
 
 
 # TODO: do I need a separate Tracker for VOT and GOT10k? 

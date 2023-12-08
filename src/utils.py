@@ -3,6 +3,38 @@ import torchvision
 import torchvision.transforms.functional as TF
 import logging
 
+def corners_to_corners_width(boxes):
+    """
+    Convert bounding box parametrization from 
+    (batched) [xmin, ymin, xmax, ymax] to [xmin, ymin, width, height]
+    boxes: [batch]x 4 tensor [xmin, ymin, xmax, ymax]
+    All values should be nonnegative (for this project should be in range 0-1)
+    """
+    xmin = boxes[...,0:1]
+    ymin = boxes[...,1:2]
+    xmax = boxes[...,2:3]
+    ymax = boxes[...,3:4]
+    width = xmax - xmin
+    height = ymax - ymin
+
+    return torch.cat([xmin,ymin,width,height],dim=-1)
+
+
+def corner_width_to_corners(boxes):
+    """
+    Convert bounding box parametrization from 
+    (batched) [xmin, ymin, width, height] to [xmin, ymin, xmax, ymax]
+    boxes: [batch]x 4 tensor [xcenter, ycenter, width, height] 
+    All values should be nonnegative (for this project should be in range 0-1)
+    """
+    xmin = boxes[...,0:1]
+    ymin = boxes[...,1:2]
+    width = boxes[...,2:3]
+    height = boxes[...,3:4]
+    xmax = xmin + width
+    ymax = ymin + height
+
+    return torch.cat([xmin,ymin,xmax,ymax],dim=-1)
 
 def center_width_to_corners(boxes):
     """
@@ -21,7 +53,6 @@ def center_width_to_corners(boxes):
     yhigh = ycenter + height/2
 
     return torch.cat([xlow,xhigh,ylow,yhigh],dim=-1)
-
 
 def bbox_to_img_coords(bbox, image):
     """ Convert a bounding box from [0, 1] range to image coordinates
