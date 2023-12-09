@@ -1,3 +1,14 @@
+"""
+Obtain evaluation metrics for our models:
+1. AUC: Area Under the Curve of bbox overlap threshold vs success rate 
+    (define "success" as passing a given overlap threshold, then plot the curve of  
+    the fraction of the time you achieve success given different overlap thresholds.
+    Finally, take the area under this curve)
+2. AO: Average Overlap (Mean bbox IoU across all frames and all videos)
+https://paperswithcode.com/sota/visual-object-tracking-on-got-10k
+https://paperswithcode.com/sota/visual-object-tracking-on-vot201718
+"""
+
 from got10k.trackers import Tracker
 from got10k.experiments import ExperimentGOT10k, ExperimentVOT
 import torch
@@ -20,7 +31,7 @@ class IdentityTracker(Tracker):
 
 # https://github.com/got-10k/siamfc/blob/master/siamfc.py
 class FoveatedVisionTracker(Tracker):
-    def __init__(self, model_filepath):
+    def __init__(self, model_filepath, targ_size=None):
         super(FoveatedVisionTracker, self).__init__(name='FoveatedVisionTracker',
                                                     is_deterministic=True)
         self.model_filepath = model_filepath
@@ -30,10 +41,14 @@ class FoveatedVisionTracker(Tracker):
         self.model.to(self.device)
         self.model.eval()
         logging.info(f"Loaded Tracker model. Device: {self.device} Filepath: {self.model_filepath}")
+        if targ_size is None:
+            self.resize = lambda x:x
+        else: 
+            self.resize = Resize(size=targ_size,antialias=True)
         self.transform = PILToTensor()
 
     def transform_PIL_image(self, PIL_image):
-        image_tensor = self.transform(PIL_image).float().to(self.device)
+        image_tensor = self.resize(self.transform(PIL_image)).float().to(self.device)
         return image_tensor
 
     def init(self, image, box):
@@ -61,7 +76,6 @@ class FoveatedVisionTracker(Tracker):
         return bbox_corners_width.detach().cpu()
 
 
-
 # TODO: do I need a separate Tracker for VOT and GOT10k? 
 
 if __name__ == '__main__':
@@ -70,7 +84,7 @@ if __name__ == '__main__':
     # model_filepath = r'/home/alovekin/foveated_vision/models/20231206_185942_model_epoch_2_step_3760.pth'
     model_filepath_base = r'./models/'
     model_filepath = model_filepath_base + r'20231206_185942_model_epoch_2_step_3760.pth'
-    tracker = FoveatedVisionTracker(model_filepath)
+    tracker = FoveatedVisionTracker(model_filepath, targ_size=(224,224))
 
     # # run experiments on VOT
     # logging.info('Running experiments on VOT')
