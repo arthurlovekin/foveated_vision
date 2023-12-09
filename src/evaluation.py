@@ -11,11 +11,16 @@ https://paperswithcode.com/sota/visual-object-tracking-on-vot201718
 
 from got10k.trackers import Tracker
 from got10k.experiments import ExperimentGOT10k, ExperimentVOT
+import json 
+import os
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from peripheral_foveal_vision_model import PeripheralFovealVisionModel
 from torchvision.io import read_image
 import logging
-from torchvision.transforms import PILToTensor
+from torchvision.transforms import PILToTensor, Resize
 from utils import bbox_to_img_coords, corners_to_corners_width
 # pip3 install got10k
 # https://github.com/got-10k/toolkit
@@ -74,6 +79,71 @@ class FoveatedVisionTracker(Tracker):
         img_coords = bbox_to_img_coords(bbox, image)
         bbox_corners_width = corners_to_corners_width(img_coords)
         return bbox_corners_width.detach().cpu()
+    
+    def plot_curves(self, report_files, tracker_names, extension='.png'):
+        assert isinstance(report_files, list), \
+            'Expected "report_files" to be a list, ' \
+            'but got %s instead' % type(report_files)
+        
+        # assume tracker_names[0] is your tracker
+        report_dir = os.path.join(self.report_dir, tracker_names[0])
+        if not os.path.exists(report_dir):
+            os.makedirs(report_dir)
+        
+        performance = {}
+        for report_file in report_files:
+            with open(report_file) as f:
+                performance.update(json.load(f))
+
+        succ_file = os.path.join(report_dir, 'success_plot'+extension)
+        key = 'overall'
+        
+        # filter performance by tracker_names
+        performance = {k:v for k,v in performance.items() if k in tracker_names}
+
+        # sort trackers by AO
+        tracker_names = list(performance.keys())
+        aos = [t[key]['ao'] for t in performance.values()]
+        inds = np.argsort(aos)[::-1]
+        tracker_names = [tracker_names[i] for i in inds]
+        
+        # markers
+        markers = ['-', '--', '-.']
+        markers = [c + m for m in markers for c in [''] * 10]
+
+        # plot success curves
+        thr_iou = np.linspace(0, 1, self.nbins_iou)
+        fig, ax = plt.subplots()
+        lines = []
+        legends = []
+        for i, name in enumerate(tracker_names):
+            line, = ax.plot(thr_iou,
+                            performance[name][key]['succ_curve'],
+                            markers[i % len(markers)])
+            lines.append(line)
+            legends.append('%s: [%.3f]' % (
+                name, performance[name][key]['ao']))
+        matplotlib.rcParams.update({'font.size': 7.4})
+        legend = ax.legend(lines, legends, loc='lower left',
+                           bbox_to_anchor=(0., 0.))
+        
+        matplotlib.rcParams.update({'font.size': 9})
+        ax.set(xlabel='Overlap threshold',
+               ylabel='Success rate',
+               xlim=(0, 1), ylim=(0, 1),
+               title='Success plots on GOT-10k')
+        ax.grid(True)
+        fig.tight_layout()
+        
+        # control ratio
+        # ax.set_aspect('equal', 'box')
+
+        print('Saving success plots to', succ_file)
+        fig.savefig(succ_file,
+                    bbox_extra_artists=(legend,),
+                    bbox_inches='tight',
+                    dpi=300)
+    
 
 
 # TODO: do I need a separate Tracker for VOT and GOT10k? 
@@ -102,7 +172,7 @@ if __name__ == '__main__':
         subset='val', #note that 'test' ground-truth is withheld
         result_dir='results',
         report_dir='reports')
-    experiment.run(tracker, visualize=False)
+    # experiment.run(tracker, visualize=False)
 
     # report performance
     experiment.report([tracker.name])
