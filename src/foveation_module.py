@@ -45,9 +45,6 @@ class FoveationModule(nn.Module):
             shape: Tensor of shape [..., 2], the target crop size in portion of the image; floats between 0 and 1
         """
         # If shape is not provided, use the default shape of the foveal patch; OK
-
-        print("\n")
-
         # print("Image shape: ", image.shape)
         # print("Fixation shape: ",fixation.shape)
         # print("Requested shape vector: ", shape)
