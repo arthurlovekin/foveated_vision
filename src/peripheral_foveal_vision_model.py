@@ -97,7 +97,7 @@ class CombinerModel(nn.Module):
         buffer_size=3,
         n_inputs: int = 4098,
         n_heads: int = 6,
-        n_encoder_layers: int = 3,
+        n_encoder_layers: int = 2,
         dropout: float = 0.1,
         fixation_length=2,
         n_object_to_track=2048,
@@ -125,12 +125,21 @@ class CombinerModel(nn.Module):
         # Map the encoded sequence to a bounding box.
         # TODO: This could use a more advanced decoder
         self.sequence_dim = (buffer_size * n_inputs) + n_object_to_track
+        self.intermediate_dim = 512  # TODO: Make this a parameter
         self.bbox_head = nn.Sequential(
-            nn.Linear(self.sequence_dim, 4),
+            nn.Linear(self.sequence_dim, self.intermediate_dim),
+            nn.Sigmoid(),
+            nn.Linear(self.intermediate_dim, self.intermediate_dim//4),
+            nn.Sigmoid(),
+            nn.Linear(self.intermediate_dim//4, 4),
             nn.Sigmoid(),  # make outputs 0-1
         )
         self.pos_head = nn.Sequential(
-            nn.Linear(self.sequence_dim, fixation_length),
+            nn.Linear(self.sequence_dim, self.intermediate_dim),
+            nn.Sigmoid(),
+            nn.Linear(self.intermediate_dim, self.intermediate_dim//4),
+            nn.Sigmoid(),
+            nn.Linear(self.intermediate_dim//4, 2),
             nn.Sigmoid(),  # make outputs 0-1
         )
         self.min_bbox_width = 0.01
