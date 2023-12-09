@@ -55,6 +55,12 @@ class VotDataset(Dataset):
     def __len__(self): 
         return len(self.videos)
     
+    def get_video_infos(self): 
+        return self.videos
+    
+    def get_video_names(self): 
+        return list(set(vid[0] for vid in self.videos))
+    
     def get_vid(self, idx):
         vidname, pos = self.videos[idx]
         start_idx, end_idx = pos * self.seq_len, (pos+1) * self.seq_len 
@@ -115,8 +121,12 @@ class NonNullVotDataset(Dataset):
             vid_segs = self._get_nonnull_segments(nonnulls,self.seq_len)
             self.videos.extend((videoname,startpoint) for startpoint in vid_segs)
             
-    def get_names(self): 
+    def get_video_infos(self): 
         return self.videos
+    
+    def get_video_names(self): 
+        return list(set(vid[0] for vid in self.videos))
+
     
     @staticmethod
     def _get_nonnull_segments(nonnulls,target_nframes):
@@ -174,7 +184,7 @@ def get_train_test_dataloaders(test_split=0.2,targ_size = None,batch_size=3, cli
     gen.manual_seed(seed)
 
     base_ds = NonNullVotDataset()
-    base_ds_videos = base_ds.get_names()
+    base_ds_videos = base_ds.get_video_infos()
     names = list(set(name_vid[0] for name_vid in base_ds_videos))
     random.shuffle(names)
     n_test_names = int(len(names) * test_split)

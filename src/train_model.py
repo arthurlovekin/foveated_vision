@@ -65,6 +65,16 @@ seed = int(time.time()*1000)
 writer.add_scalar("Dataloader/seed", seed, 0)
 train_loader, test_loader = get_train_test_dataloaders(batch_size=batch_size_train,targ_size=(224, 224),clip_length_s=clip_length_s_train, seed=seed)
 
+train_vids = train_loader.dataset.get_video_names()
+test_vids = test_loader.dataset.get_video_names()
+
+logging.info(f'Training on vids: {train_vids}')
+logging.info(f'Testing  on vids: {test_vids}')
+
+writer.add_text('Dataloader/train_vids',str(train_vids))
+writer.add_text('Dataloader/test_vids',str(test_vids))
+
+
 # Load the model
 model = PeripheralFovealVisionModel()
 
