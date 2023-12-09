@@ -41,8 +41,8 @@ class FoveatedVisionTracker(Tracker):
                                                     is_deterministic=True)
         self.model_filepath = model_filepath
         self.model = PeripheralFovealVisionModel()
-        self.model.load_state_dict(torch.load(self.model_filepath))
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #torch.device("cpu") #
+        self.model.load_state_dict(torch.load(self.model_filepath, map_location=self.device))
         self.model.to(self.device)
         self.model.eval()
         logging.info(f"Loaded Tracker model. Device: {self.device} Filepath: {self.model_filepath}")
@@ -79,7 +79,8 @@ class FoveatedVisionTracker(Tracker):
         img_coords = bbox_to_img_coords(bbox, image)
         bbox_corners_width = corners_to_corners_width(img_coords)
         return bbox_corners_width.detach().cpu()
-    
+
+class CustomExperimentGOT10k(ExperimentGOT10k):
     def plot_curves(self, report_files, tracker_names, extension='.png'):
         assert isinstance(report_files, list), \
             'Expected "report_files" to be a list, ' \
@@ -117,15 +118,15 @@ class FoveatedVisionTracker(Tracker):
         lines = []
         legends = []
         for i, name in enumerate(tracker_names):
+            success_curve = performance[name][key]['succ_curve']
             line, = ax.plot(thr_iou,
-                            performance[name][key]['succ_curve'],
+                            success_curve,
                             markers[i % len(markers)])
             lines.append(line)
-            legends.append('%s: [%.3f]' % (
-                name, performance[name][key]['ao']))
+            area_under_curve = sum(success_curve) # approximation
+            legends.append(f"{name}\n  AO: {performance[name][key]['ao']:0.3f}, AUC: {area_under_curve:0.3f}")
         matplotlib.rcParams.update({'font.size': 7.4})
-        legend = ax.legend(lines, legends, loc='lower left',
-                           bbox_to_anchor=(0., 0.))
+        legend = ax.legend(lines, legends) #loc='lower left', bbox_to_anchor=(0., 0.))
         
         matplotlib.rcParams.update({'font.size': 9})
         ax.set(xlabel='Overlap threshold',
@@ -167,7 +168,7 @@ if __name__ == '__main__':
 
     # run experiments on GOT-10k (validation subset)
     logging.info('Running experiments on GOT-10k (validation subset)...')
-    experiment = ExperimentGOT10k(
+    experiment = CustomExperimentGOT10k(
         root_dir=r'/scratch/engin_root/engin1/shared_data/group_raz/data/got10k',
         subset='val', #note that 'test' ground-truth is withheld
         result_dir='results',
