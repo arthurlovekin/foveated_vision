@@ -19,14 +19,15 @@ class EmbeddingModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.pretrained = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
+        for param in self.pretrained.parameters():
+            param.requires_grad = False
         if hasattr(self.pretrained, "fc"):
-            self.pretrained.fc = torch.nn.Identity()
+            # self.pretrained.fc = torch.nn.Identity()
+            self.pretrained.fc = nn.Linear(2048, 2048)
         else:
             logging.error("No fc layer found in pretrained model")
-        # self.pretrained.fc = nn.Linear(2048, 4)
         # self.pretrined_new = torch.nn.Sequential(*list(self.pretrained.children())[:-1])
-        # for param in self.pretrained[-1].parameters():
-        #     param.requires_grad = False
+        # Freeze the weights of the pretrained model except for the last layer
 
     def forward(self, low_res_image):
         # output: (batch, 2048) feature vector

@@ -30,9 +30,8 @@ logging.basicConfig(
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 num_epochs = 3
-batch_size_train = 16
-batch_size_test = 9
-learning_rate = 1e-6
+batch_size_train = 16  # Also used for test
+learning_rate = 5e-6
 clip_length_s_train = 0.09  # Two frames
 clip_length_s_test = 0.5
 save_model = True
@@ -139,46 +138,28 @@ def test(model, test_loader, loss_fn, step=0):
             vinputs, vlabels = vdata
             vinputs = vinputs.to(device)
             vlabels = vlabels.to(device)
-            # Iterate through the sequence and test on each one
-            seq_iterator = SequenceIterator(vinputs, vlabels)
-            curr_inputs = (
-                None  # Evalulate on these so we have access to the "next" fixation
-            )
-            curr_labels = None
-            frame_progress_bar = tqdm(
-                seq_iterator,
-                total=vinputs.shape[1],
-                desc=f"Test set progress",
-                position=1,
-                leave=True,
-            )
+            # Process pair
+            curr_inputs = vinputs[:, 0, :, :, :]
+            curr_labels = vlabels[:, 0, :]
             bboxes = []  # For tensorboard visualization.
             gt_bboxes = []  # For tensorboard visualization.
             images = []  # For tensorboard visualization.
             # TODO: show bounding box on image in tensorboard
-            for inputs, labels in frame_progress_bar:
-                if curr_inputs is None or curr_labels is None:
-                    # Already on device as views of larger tensors
-                    curr_inputs = inputs
-                    curr_labels = labels
-                    continue
-                total_samples += curr_labels.shape[0]
-                next_inputs = inputs
-                next_labels = labels
-                pred_bbox = model(curr_inputs, curr_labels, next_inputs)
-                # Add the bounding box to the list for visualization
-                images.append(next_inputs)
-                bboxes.append(pred_bbox)
-                gt_bboxes.append(curr_labels)
-                vloss = loss_fn(pred_bbox, next_labels)
-                running_vloss += vloss
-                curr_inputs = next_inputs
-                curr_labels = next_labels
+            total_samples += curr_labels.shape[0]
+            next_inputs = vinputs[:, 1, :, :, :]
+            next_labels = vlabels[:, 1, :]
+            pred_bbox = model(curr_inputs, curr_labels, next_inputs)
+            # Add the bounding box to the list for visualization
+            bboxes.append(pred_bbox)
+            gt_bboxes.append(next_labels)
+            images.append(next_inputs)
+            vloss = loss_fn(pred_bbox, next_labels)
+            running_vloss += vloss
             # Create a grid of images with bounding boxes
             # For now, just show the first clip in the batch
             logging.info(f"Test loop: first estimated bbox: {bboxes[0]}")
             try:
-                bbox_grid = make_bbox_grid(images, bboxes, gt_bboxes, decimation=5)
+                bbox_grid = make_bbox_grid(images, bboxes, gt_bboxes, decimation=1)
                 writer.add_image("images/test", bbox_grid, step)
                 logging.info(f"Wrote image grid to tensorboard at step {step}")
             except Exception as e:
@@ -207,7 +188,7 @@ for epoch in range(num_epochs):
         epoch_progress_bar = tqdm(
             train_loader, desc=f"Epoch {epoch+1}/{num_epochs}", position=0, leave=True
         )  # Update position of other bars if using.
-    for seq_inputs, seq_labels in train_loader:
+    for seq_inputs, seq_labels in epoch_progress_bar:
         total_loss = 0.0
         total_samples = 0
 
@@ -217,63 +198,29 @@ for epoch in range(num_epochs):
 
         seq_inputs = seq_inputs.to(device)
         seq_labels = seq_labels.to(device)
-        # Each iteration is a batch of sequences of images
-        frame = 0
-        num_frames = seq_inputs.shape[1]
-        curr_inputs = None  # Train on these so we have access to the "next" fixation
-        curr_labels = None
-        # Iterate through the sequence and train on each one
-        seq_iterator = SequenceIterator(seq_inputs, seq_labels)
-        frame_progress_bar = tqdm(
-            seq_iterator,
-            total=num_frames,
-            desc=f"Step {step+1} progress",
-            position=(1 if use_epoch_progress_bar else 0),
-            leave=True,
-        )
-        for inputs, labels in frame_progress_bar:
-            # Each iteration is a batch of sequences of images
-            # Iterate through the sequence and train on each one
-            if curr_inputs is None or curr_labels is None:
-                # Already on device as views of larger tensors
-                curr_inputs = inputs
-                curr_labels = labels
-                frame += 1
-                continue
-
-            logging.debug(f"Current frame input shape: {curr_inputs.shape}")
-            logging.debug(f"Current frame label shape: {curr_labels.shape}")
-            if torch.cuda.is_available():
-                # logging.info(torch.cuda.memory_summary(device=device, abbreviated=False))  # Very verbose
-                # Get free CUDA memory in GiB
-                used_memory = torch.cuda.memory_allocated() / 1024**3
-                logging.debug(f"Current used CUDA memory: {used_memory}")
-                writer.add_scalar(
-                    "Memory/CUDA_used_GiB", used_memory, step * num_frames + frame
-                )
-
-            # Already on device as views of larger tensors
-            next_inputs = inputs
-            next_labels = labels
-            # Forward pass
-            # Run on the "current" frame to generate fixation for the "next" inputs (popped in the current iteration)
-            pred_bbox = model(curr_inputs, curr_labels, next_inputs)
-            logging.debug(f"Current estimated bbox: {pred_bbox}")
-            logging.debug(f"Currrent true bbox: {curr_labels}")
-            logging.debug(f"Next true bbox: {next_labels}")
-            loss = loss_fn(pred_bbox, next_labels)
-            loss = loss
-
+        curr_inputs = seq_inputs[:, 0, :, :, :]
+        curr_labels = seq_labels[:, 0, :]
+        next_inputs = seq_inputs[:, 1, :, :, :]
+        next_labels = seq_labels[:, 1, :]
+        logging.debug(f"Current frame input shape: {curr_inputs.shape}")
+        logging.debug(f"Current frame label shape: {curr_labels.shape}")
+        if torch.cuda.is_available():
+            # logging.info(torch.cuda.memory_summary(device=device, abbreviated=False))  # Very verbose
+            # Get free CUDA memory in GiB
+            used_memory = torch.cuda.memory_allocated() / 1024**3
+            logging.debug(f"Current used CUDA memory: {used_memory}")
             writer.add_scalar(
-                "Loss/train_frame", loss.detach(), step * num_frames + frame
-            )  # Loss for each frame
-            total_loss += loss
-            total_samples += curr_labels.shape[0]
+                "Memory/CUDA_used_GiB", used_memory, step
+            )
 
-            # Save current frame for next iteration
-            curr_inputs = next_inputs
-            curr_labels = next_labels
-            frame += 1
+        # Forward pass
+        # Run on the "current" frame to generate fixation for the "next" inputs (popped in the current iteration)
+        pred_bbox = model(curr_inputs, curr_labels, next_inputs)
+        logging.debug(f"Current estimated bbox: {pred_bbox}")
+        logging.debug(f"Currrent true bbox: {curr_labels}")
+        logging.debug(f"Next true bbox: {next_labels}")
+        total_loss = loss_fn(pred_bbox, next_labels)
+        total_samples = curr_labels.shape[0]
         if use_epoch_progress_bar:
             epoch_progress_bar.set_postfix(
                 loss=f"{total_loss.item() / total_samples:.4f}",
@@ -284,10 +231,8 @@ for epoch in range(num_epochs):
         # Calculate the gradient of the accumulated loss only at the end of the loop (not inside)
         total_loss.backward()
         optimizer.step()
-
         # Log training info
         writer.add_scalar("Loss/train", total_loss, step)  # Average loss
-
         # Evaluate on test set
         if step % test_frequency == 0:
             test_loss = test(model, test_loader, loss_fn, step).item()
