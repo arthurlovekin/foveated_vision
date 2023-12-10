@@ -8,29 +8,38 @@ import sys
 import os
 from tqdm import tqdm
 from dataset.vot_dataset import *
-from peripheral_foveal_vision_model import PeripheralFovealVisionModel
+from single_frame_model import SingleFrameTrackingModel
 
 
 def visualize_video(model, video_frames,gt_bounding_box,normby=None, out_dir=None):
     model.eval()
     # Make a list of all the bounding boxes and fixations
     all_bboxes = torch.Tensor()
-    all_fixations = torch.Tensor()
     with torch.no_grad(): 
         # Evaluate model in autoregressive way
         # Make progress bar
-        progress_bar = tqdm(range(video_frames.shape[0]), leave=True)
+        progress_bar = tqdm(range(1, video_frames.shape[0]), leave=True)
+        # Start with the gt bounding box
+        prev_image = video_frames[0,...].unsqueeze(0)
+        prev_bbox = gt_bounding_box[0, :].unsqueeze(0)
+        all_bboxes = prev_bbox  # To make the dimensions match
+        curr_bbox = None
+        curr_image = None
         for i in progress_bar: 
-            bboxes, fixations = model(video_frames[i,...].unsqueeze(0))
+            # Get the current image
+            curr_image = video_frames[i,...].unsqueeze(0)
+            bboxes = model(prev_image, prev_bbox, curr_image)
+            # Update the previous image and bounding box
+            prev_image = curr_image
+            # prev_bbox = bboxes  # "Correct" way to do it
+            # Get the next bounding box from ground truth
+            prev_bbox = gt_bounding_box[i, :].unsqueeze(0)
             # Recover sequence dim 
-            bboxes = bboxes.unsqueeze(0)
-            fixations = fixations.unsqueeze(0)
+            # logging.info(f"bboxes.shape: {bboxes.shape}")
             all_bboxes = torch.cat([all_bboxes,bboxes],axis=0)
-            all_fixations = torch.cat([all_fixations,fixations],axis=0)
     # logging.info(f"all_bboxes.shape: {all_bboxes.shape}")
-    # logging.info(f"all_fixations.shape: {all_fixations.shape}")
     # logging.info(f"gt_bounding_box.shape: {gt_bounding_box.shape}")
-    imgs_with_bboxes = draw_bboxes(video_frames,[all_bboxes,all_fixations,gt_bounding_box],names=['predicted bb','fovea','ground truth bb'],norm_by=normby)
+    imgs_with_bboxes = draw_bboxes(video_frames,[all_bboxes,gt_bounding_box],names=['predicted bb','ground truth bb'],norm_by=normby)
     # Make sure the out directory exists
     if out_dir is None:
         out_dir = 'out'
@@ -55,12 +64,12 @@ def visualize_video(model, video_frames,gt_bounding_box,normby=None, out_dir=Non
 
 
 def main(model_path,choose_vid=32, out_dir=None): 
-    model = PeripheralFovealVisionModel()
+    model = SingleFrameTrackingModel(input_size=(512,512))
     model.load_state_dict(torch.load(model_path))
     ds = VotDataset()
     # print(ds[choose_vid][1])
     logging.info(f"Video {choose_vid} has {len(ds[choose_vid][0])} frames")
-    visualize_video(model,ds[choose_vid][0], ds[choose_vid][1],normby = ['default','default','xyxy'], out_dir=out_dir)
+    visualize_video(model,ds[choose_vid][0], ds[choose_vid][1],normby = ['default','xyxy'], out_dir=out_dir)
 
 if __name__ == "__main__":
     # Get the model path from the command line

@@ -31,7 +31,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 num_epochs = 5
 batch_size_train = 16  # Also used for test
-learning_rate = 5e-6
+learning_rate = 1e-6
 clip_length_s_train = 0.09  # Two frames
 clip_length_s_test = 0.5
 save_model = True
