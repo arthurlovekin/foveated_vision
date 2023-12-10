@@ -1,1 +1,1 @@
-FFMPEG_PATH = "/home/rajivg/eecs542/ffmpeg-6.1-amd64-static"
+FFMPEG_PATH = "/home/rajivg/eecs542/ffmpeg-6.1-amd64-static/ffmpeg"
