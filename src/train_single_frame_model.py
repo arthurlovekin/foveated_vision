@@ -29,7 +29,7 @@ logging.basicConfig(
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-num_epochs = 3
+num_epochs = 5
 batch_size_train = 16  # Also used for test
 learning_rate = 5e-6
 clip_length_s_train = 0.09  # Two frames
@@ -40,7 +40,7 @@ if not os.path.exists(model_dir):
     os.makedirs(model_dir)
 test_frequency = 50  # Evaluate on test set every N steps.
 save_frequency = (
-    test_frequency * 8
+    test_frequency * 5
 )  # Save model every N steps. Must be a multiple of test_frequency as we only save if the test loss is better.
 use_epoch_progress_bar = (
     True  # Use epoch progress bar in addition to step progress bar
