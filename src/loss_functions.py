@@ -95,9 +95,9 @@ class PeripheralFovealVisionModelLoss:
         self.foveation_loss = FoveationLoss(
             (224, 224)
         )  # TODO: Make this independent of the image size?
-        self.mse_fovea_weight = 0.0  # On bounding box of next fixation vs the true next bounding box
-        self.mse_weight = 1.0  # On predicted bounding box
-        self.iou_weight = 0.05  # WARNING: setting this to 1 is breaking things
+        self.mse_fovea_weight = 10.0  # On bounding box of next fixation vs the true next bounding box
+        self.mse_weight = 0.01  # On predicted bounding box
+        self.iou_weight = 0.01  # WARNING: setting this to 1 is breaking things
         self.foveation_weight = 0.0
         self.default_width, self.default_height = default_fovea_shape
 
