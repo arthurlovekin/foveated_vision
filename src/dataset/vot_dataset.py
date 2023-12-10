@@ -4,6 +4,7 @@ from os import path as Path
 import random
 import torch
 import time
+import multiprocessing
 import torchvision
 from torch.utils.data import DataLoader, Dataset
 from torchvision.io import read_image
@@ -97,6 +98,7 @@ class NonNullVotDataset(Dataset):
         self.basedir = directories[dataset_name]
         self.seq_len = int(clip_secs * 30)
         self.target_size = targ_size
+        self.preload_data = False
         if targ_size is None:
             self.resize = lambda x:x
         else: 
@@ -114,7 +116,25 @@ class NonNullVotDataset(Dataset):
                 nonnulls = [('nan' not in line) for line in file.readlines() if len(line) != 0] 
             vid_segs = self._get_nonnull_segments(nonnulls,self.seq_len)
             self.videos.extend((videoname,startpoint) for startpoint in vid_segs)
+        
+        # Load all the images and labels into memory
+        # Use up to 40 sub-processes to load the images
+        # We have 180GB of RAM on the server, so we can afford to load all the images into memory
+        self.video_cache = multiprocessing.Manager().dict()
+        self.label_cache = multiprocessing.Manager().dict()
+        if self.preload_data:
+            with multiprocessing.Pool(processes=32) as pool:
+                pool.map(self.preprocess_image, range(len(self)))
+            logging.debug("Finished loading all images and labels into memory")
+        self.video_cache = dict(self.video_cache)
+        self.label_cache = dict(self.label_cache)
             
+    def preprocess_image(self,imnum):
+        logging.debug(f'Loading image {imnum}')
+        img, yval = self.get_vid(imnum)
+        self.video_cache[imnum] = img
+        self.label_cache[imnum] = yval
+    
     def get_names(self): 
         return self.videos
     
@@ -136,6 +156,10 @@ class NonNullVotDataset(Dataset):
         return len(self.videos)
     
     def get_vid(self, idx):
+        # Check if the image and label are already in the cache
+        if idx in self.video_cache and idx in self.label_cache:
+            return self.video_cache[idx], self.label_cache[idx]
+
         vidname, start_frame = self.videos[idx]
         start_idx, end_idx = start_frame, start_frame + self.seq_len
 
@@ -143,7 +167,8 @@ class NonNullVotDataset(Dataset):
         with open(Path.join(viddir,'groundtruth.txt'),'r') as file: 
             groundtruth = torch.tensor([[float(elt) for elt in line.split(',')] for line in file.readlines() if len(line) != 0])
         img = read_image(Path.join(viddir,f'color/{1:08d}.jpg'))
-        first = self.resize(img)
+        resize = Resize(size=self.target_size,antialias=True)  # For parallelism, can't share this object
+        first = resize(img)
         groundtruth = groundtruth[start_idx:end_idx,:] / torch.tensor([img.shape[-1],img.shape[-2],img.shape[-1],img.shape[-2]])
         # Groundtruth may have lines with [Nan, Nan, Nan, Nan], but we need labels at every timestep
         # TODO: interpolate the groundtruth labels
@@ -156,7 +181,8 @@ class NonNullVotDataset(Dataset):
         images = torch.zeros([self.seq_len] + list(first.shape))
         for i in range(self.seq_len): 
             # Resize and remap colorspace to 0.0-1.0
-            images[i] = self.resize(read_image(Path.join(viddir,f'color/{start_idx + i+1:08d}.jpg'))) / 255.0
+            logging.debug(f'Loading image {i} from video {vidname}')
+            images[i] = resize(read_image(Path.join(viddir,f'color/{start_idx + i+1:08d}.jpg'))) / 255.0
         groundtruth = torch.stack([
             groundtruth[:,0], groundtruth[:,1], groundtruth[:,0] + groundtruth[:,2], groundtruth[:,1] + groundtruth[:,3]
         ],dim=-1)
@@ -178,6 +204,8 @@ def get_train_test_dataloaders(test_split=0.2,targ_size = None,batch_size=3, cli
     names = list(set(name_vid[0] for name_vid in base_ds_videos))
     random.shuffle(names)
     n_test_names = int(len(names) * test_split)
+    # Perform the test-train split on videos, not samples.
+    # This prevents contamination of the test set by the same video in the training set
     test_names,train_names = names[:n_test_names], names[n_test_names:]
     logging.info(f'train has {len(train_names)} sources; test has {len(test_names)} sources')
     logging.debug(f'train split has videos: {train_names}')
@@ -187,14 +215,16 @@ def get_train_test_dataloaders(test_split=0.2,targ_size = None,batch_size=3, cli
     test_ds = NonNullVotDataset(targ_size=targ_size, clip_secs=clip_length_s,filter_set = test_names)
     logging.info(f'train has {len(train_ds)} samples; test has {len(test_ds)} samples')
 
+    train_workers = 32
+    test_workers = 4
     if 'generator' not in loader_kwargs: 
         loader_kwargs['generator'] = gen
-    train_dl = DataLoader(train_ds,batch_size=batch_size,shuffle=shuffle,**loader_kwargs,collate_fn=None)
+    train_dl = DataLoader(train_ds,batch_size=batch_size,shuffle=shuffle,**loader_kwargs,collate_fn=None, num_workers=train_workers)
     if 'generator' not in loader_kwargs: 
         gen = torch.Generator()
         gen.manual_seed(seed)
         loader_kwargs['generator'] = gen
-    test_dl = DataLoader(test_ds,batch_size=batch_size,shuffle=shuffle,**loader_kwargs,collate_fn=None)
+    test_dl = DataLoader(test_ds,batch_size=batch_size,shuffle=shuffle,**loader_kwargs,collate_fn=None, num_workers=test_workers)
     return train_dl, test_dl 
 
 def get_dataloader(nullish_dataset=False, dataset_name='longterm',targ_size = None,batch_size=3, clip_length_s=5, shuffle=True, seed = None,**loader_kwargs):
