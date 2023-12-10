@@ -85,6 +85,18 @@ class IntersectionOverUnionLoss:
         # WARNING: broken because it doesn't handle inverted bounding box corners
         return loss
 
+class SimpleMseLoss:
+    """
+    Just an MSE loss on the four coordinates of the bounding box
+    """
+    def __init__(self):
+        self.mse_loss = nn.MSELoss(reduction="sum")
+    def __call__(self, box1, box2):
+        """
+        box1: tensor of shape [batch, 4] where the 4 values are [x1,y1,x2,y2] (bounding box corners)
+        box2: tensor of shape [batch, 4] where the 4 values are [x1,y1,x2,y2] (bounding box corners)
+        """
+        return self.mse_loss(box1,box2)
 
 class PeripheralFovealVisionModelLoss:
     def __init__(self, default_fovea_shape=(0.25, 0.25)):
