@@ -169,6 +169,9 @@ def test(model, test_loader, loss_fn, step=0):
                     # Already on device as views of larger tensors
                     curr_inputs = inputs
                     curr_labels = labels
+                    # Model needs to be initialized with the first frame
+                    # TODO(rgg): Is it ok to then use this frame for training, or should we skip it?
+                    model.initialize(curr_inputs, curr_labels)
                     continue
                 total_samples += curr_labels.shape[0]
                 next_inputs = inputs

@@ -8,6 +8,7 @@ from torchvision.models import ResNet50_Weights, resnet50
 from torchvision.transforms import Resize
 
 from foveation_module import FoveationModule
+from utils import fix_fovea_if_needed
 
 # from typing import Tensor
 
@@ -21,9 +22,12 @@ class PeripheralModel(nn.Module):
     with the foveal features to produce a bounding box and fixation point).
     """
 
-    def __init__(self):
+    def __init__(self, frozen=False):
         super().__init__()
         self.pretrained = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
+        if frozen:
+            for param in self.pretrained.parameters():
+                param.requires_grad = False
         if hasattr(self.pretrained, "fc"):
             self.pretrained.fc = torch.nn.Identity()
         else:
@@ -45,9 +49,12 @@ class FovealModel(nn.Module):
     with the peripheral features to produce a bounding box and fixation point).
     """
 
-    def __init__(self):
+    def __init__(self, frozen=False):
         super().__init__()
         self.pretrained = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
+        if frozen:
+            for param in self.pretrained.parameters():
+                param.requires_grad = False
         if hasattr(self.pretrained, "fc"):
             self.pretrained.fc = torch.nn.Identity()
         else:
@@ -84,6 +91,72 @@ class PositionalEncoding(nn.Module):
         x = x + self.position_encoding[: x.size(0)]
         return self.dropout(x)
 
+class LinearCombiner(nn.Module):
+    """
+    Takes buffers of foveal features, peripheral features, and fovea points, and
+    combines them to produce a bounding box and new fixation point.
+
+    This model flattens the sequence and uses a sequence of linear layers to 
+    produce a latent vector. Then, there are two linear heads to predict the bounding box
+    and next fixation point.
+    """
+    
+    def __init__(
+        self,
+        buffer_size=3,
+        n_inputs: int = 4098,
+        n_encoder_layers: int = 2,
+        dropout: float = 0.0,
+        fixation_length=2,
+        n_object_to_track=2048+4,
+    ):
+        """
+        Args:
+            buffer_size (int): Number of previous frames to consider
+            n_inputs (int): Number of input features (peripheral features + foveal features + fovea points)
+            n_encoder_layers (int): Number of encoder layers
+            dropout (float): Dropout probability
+        """
+        super().__init__()
+        self.sequence_dim = (buffer_size * n_inputs) + n_object_to_track
+        self.encoder = nn.Sequential(
+            nn.Linear(self.sequence_dim, self.sequence_dim//2),
+            nn.ReLU(),
+            nn.Linear(self.sequence_dim//2, self.sequence_dim//2),
+            nn.ReLU(),
+            nn.Linear(self.sequence_dim//2, self.sequence_dim//2),
+            nn.ReLU(),
+        )
+        self.intermediate_dim = 512  # TODO: Make this a parameter
+        self.bbox_head = nn.Sequential(
+            nn.Linear(self.sequence_dim//2, self.intermediate_dim),
+            nn.ReLU(),
+            nn.Linear(self.intermediate_dim, self.intermediate_dim//4),
+            nn.ReLU(),
+            nn.Linear(self.intermediate_dim//4, 4),
+            nn.Sigmoid(),  # make outputs 0-1
+        )
+        self.pos_head = nn.Sequential(
+            nn.Linear(self.sequence_dim//2, self.intermediate_dim),
+            nn.ReLU(),
+            nn.Linear(self.intermediate_dim, self.intermediate_dim//4),
+            nn.ReLU(),
+            nn.Linear(self.intermediate_dim//4, 2),
+            nn.Sigmoid(),  # make outputs 0-1
+        )
+
+    def forward(self, all_features_buffer, object_to_track_z):
+        # Flatten the sequence
+        latent_seq = all_features_buffer.reshape((all_features_buffer.shape[0], -1))
+        # Concatenate the object to track to the sequence (early fusion)
+        latent_seq = torch.cat([latent_seq, object_to_track_z], dim=1)
+        # Run the encoder to get an intermediate representation
+        encoded = self.encoder(latent_seq)
+        # Predict the bounding box and next fixation point
+        bbox = self.bbox_head(encoded)
+        pos = self.pos_head(encoded)
+        return bbox, pos
+
 
 class CombinerModel(nn.Module):
     """
@@ -96,9 +169,10 @@ class CombinerModel(nn.Module):
         buffer_size=3,
         n_inputs: int = 4098,
         n_heads: int = 6,
-        n_encoder_layers: int = 3,
+        n_encoder_layers: int = 2,
         dropout: float = 0.1,
         fixation_length=2,
+        n_object_to_track=2048+4,
     ):
         """
         Args:
@@ -122,18 +196,27 @@ class CombinerModel(nn.Module):
         )  # (contains multiple TransformerEncoderLayers)
         # Map the encoded sequence to a bounding box.
         # TODO: This could use a more advanced decoder
-        self.sequence_dim = buffer_size * n_inputs
+        self.sequence_dim = (buffer_size * n_inputs) + n_object_to_track
+        self.intermediate_dim = 512  # TODO: Make this a parameter
         self.bbox_head = nn.Sequential(
-            nn.Linear(self.sequence_dim, 4),
+            nn.Linear(self.sequence_dim, self.intermediate_dim),
+            nn.Sigmoid(),
+            nn.Linear(self.intermediate_dim, self.intermediate_dim//4),
+            nn.Sigmoid(),
+            nn.Linear(self.intermediate_dim//4, 4),
             nn.Sigmoid(),  # make outputs 0-1
         )
         self.pos_head = nn.Sequential(
-            nn.Linear(self.sequence_dim, fixation_length),
+            nn.Linear(self.sequence_dim, self.intermediate_dim),
+            nn.Sigmoid(),
+            nn.Linear(self.intermediate_dim, self.intermediate_dim//4),
+            nn.Sigmoid(),
+            nn.Linear(self.intermediate_dim//4, 2),
             nn.Sigmoid(),  # make outputs 0-1
         )
         self.min_bbox_width = 0.01
 
-    def forward(self, all_features_buffer):
+    def forward(self, all_features_buffer, object_to_track_z):
         # Transformer expects input of shape (batch, seq_len, feature_len)
         # Concatenate all features along the time dimension
         positional_features = self.positional_encoding(all_features_buffer)
@@ -142,6 +225,10 @@ class CombinerModel(nn.Module):
         # Hack decoder
         # Flatten the sequence
         latent_seq = latent_seq.reshape((latent_seq.shape[0], -1))
+        # Concatenate the object to track to the sequence
+        # TODO(rgg): explore early fusion vs late fusion. Not as helpful for the transformer
+        # if this info comes in at the end?
+        latent_seq = torch.cat([latent_seq, object_to_track_z], dim=1)
         bbox = self.bbox_head(latent_seq)
         pos = self.pos_head(latent_seq)
         return bbox, pos
@@ -168,9 +255,8 @@ class CombinerModelTimeSeriesTransformer(nn.Module):
 
 
 class PeripheralFovealVisionModel(nn.Module):
-    def __init__(self):  # , batch_size=1):
+    def __init__(self):
         super().__init__()
-        # self.batch_size = batch_size
         self.peripheral_resolution = RESNET_DEFAULT_INPUT_SIZE
         self.downsampler = Resize(
             (self.peripheral_resolution[0], self.peripheral_resolution[1]),
@@ -184,9 +270,12 @@ class PeripheralFovealVisionModel(nn.Module):
         self.peripheral_model = PeripheralModel()
         self.foveal_model = FovealModel()
         self.combiner_model = CombinerModel(fixation_length=self.fixation_length)
+        # self.combiner_model = LinearCombiner(fixation_length=self.fixation_length)
         self.position_encoding = None
         self.current_fixation = None
         self.buffer = None
+        # Latent representation of the object to track. Always appended to the buffer
+        self.object_to_track_z = None 
 
     def reset(self):
         # Need to detach then reattach the hidden variables of the model to prevent
@@ -194,6 +283,45 @@ class PeripheralFovealVisionModel(nn.Module):
         # (Setting to none causes them to be reinitialized)
         self.current_fixation = None
         self.buffer = None
+        self.object_to_track_z = None
+
+    def initialize(self, current_image, init_bbox):
+        """
+        Initialize the model with a bounding box and image.
+        Should be batch-enabled.
+        """
+        # Take a high res patch centered at the bbox using the foveation module
+        # Get the center of the bbox (batched) (xmin, ymin, xmax, ymax)
+        # Need a tensor of shape (batch, 2) for the foveation module
+        bbox_center = torch.stack([
+                (init_bbox[:, 0] + init_bbox[:, 2]) / 2.0,
+                (init_bbox[:, 1] + init_bbox[:, 3]) / 2.0,
+            ], dim=1)
+        with torch.no_grad():
+            patch = self.foveation_module(bbox_center, current_image)
+        # Initialize the current fixation to the center of the bbox
+        self.current_fixation = bbox_center
+        # Run the foveal model on the patch and save the result
+        # TODO(rgg): see if we should keep gradients on for this
+        with torch.no_grad():
+            patch_z = self.foveal_model(patch)
+            # Concatenate the bounding box to the patch
+            self.object_to_track_z = torch.cat([patch_z, init_bbox], dim=1)
+    
+    def initialize_buffer(self, current_image, feature_vector):
+        """
+        Initialize the buffer
+        Requeires that the object_to_track_z is already initialized
+        """
+        # Buffer contains object to track + features from each of the previous frames
+        self.buffer = (
+            torch.rand_like(
+                feature_vector.unsqueeze(1).expand(-1, self.buffer_len, -1),
+                dtype=torch.float32,
+                device=current_image.device,
+            )
+            - 0.5
+            ) * 0.1  # What are these magic numbers?
 
     def get_default_fovea_size(self):
         return self.foveation_module.crop_width, self.foveation_module.crop_height
@@ -203,6 +331,8 @@ class PeripheralFovealVisionModel(nn.Module):
         Args:
             current_image (torch.tensor): (batch, channels, height, width) image
         """
+        if len(current_image.shape) == 3: 
+            current_image.unsqueeze(0)
         # Initialize the current fixation if necessary
         if self.current_fixation is None:
             self.batch_size = current_image.shape[0]
@@ -214,14 +344,21 @@ class PeripheralFovealVisionModel(nn.Module):
                 )
                 * 0.5
             )
-
+        if self.object_to_track_z is None:
+            # Initialize to the current fixation if not already initialized.
+            fovea_bbox = fix_fovea_if_needed(
+                self.current_fixation, default_shape=self.get_default_fovea_size()
+            )
+            self.initialize(current_image, fovea_bbox)
         # Extract features from the peripheral image
         background_img = self.downsampler(current_image)
         peripheral_feature = self.peripheral_model(background_img)
         logging.debug(f"Peripheral feature shape: {peripheral_feature.shape}")
 
         # Extract features from the foveal patch
+        # TOOD(rgg): remove this, just for testing without foveation
         foveal_patch = self.foveation_module(self.current_fixation, current_image)
+        # foveal_patch = current_image
         logging.debug(f"Foveal patch shape: {foveal_patch.shape}")
         foveal_feature = self.foveal_model(foveal_patch)
         logging.debug(f"Foveal feature shape: {foveal_feature.shape}")
@@ -235,24 +372,16 @@ class PeripheralFovealVisionModel(nn.Module):
 
         # Initialize the buffer if necessary
         if self.buffer is None:
-            self.buffer = (
-                torch.rand_like(
-                    all_features.unsqueeze(1).expand(-1, self.buffer_len, -1),
-                    dtype=torch.float32,
-                    device=current_image.device,
-                )
-                - 0.5
-            ) * 0.1
+            self.initialize_buffer(current_image, all_features)
 
         temp_buffer = torch.cat([all_features.unsqueeze(1), self.buffer], dim=1)
         logging.debug(f"Temp buffer shape: {temp_buffer.shape}")
-        self.buffer = temp_buffer[:, : self.buffer_len, :]
+        # Take the buffer_len most recent frames.
+        self.buffer = temp_buffer[:, :self.buffer_len, :]
         logging.debug(f"Buffer shape: {self.buffer.shape}")
-
-        bbox, next_fixation = self.combiner_model(self.buffer)
-
+        bbox, next_fixation = self.combiner_model(self.buffer, self.object_to_track_z)
         self.current_fixation = next_fixation
-        return bbox, next_fixation
+        return torch.squeeze(bbox, dim=0), torch.squeeze(next_fixation, dim=0)
 
 
 if __name__ == "__main__":
