@@ -31,11 +31,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 num_epochs = 3
 batch_size_train = 8
-batch_size_test = 15
 learning_rate = 1e-05
-momentum = 0.7
-clip_length_s_train = 0.25
-clip_length_s_test = 1
+clip_length_s_train = 0.3
 save_model = True
 model_dir = "models"
 if not os.path.exists(model_dir):
@@ -63,10 +60,12 @@ writer = SummaryWriter(flush_secs=2)
 seed = int(time.time()*1000)
 # Save seed to tensorboard
 writer.add_scalar("Dataloader/seed", seed, 0)
-train_loader, test_loader = get_train_test_dataloaders(batch_size=batch_size_train,targ_size=(224, 224),clip_length_s=clip_length_s_train, seed=seed)
+train_loader, test_loader = get_train_test_dataloaders(batch_size=batch_size_train,targ_size=(512, 512),clip_length_s=clip_length_s_train, seed=seed)
 
 # Load the model
-model = PeripheralFovealVisionModel()
+model = PeripheralFovealVisionModel(
+    use_foveation_module=True
+)
 
 default_fovea_shape = model.get_default_fovea_size()
 
@@ -79,8 +78,6 @@ model = model.to(device)
 foveation_loss = PeripheralFovealVisionModelLoss(
     default_fovea_shape=default_fovea_shape
 )
-foveation_loss.foveation_weight = 0.0  # TODO: Remove this, just for testing
-ce_loss = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 # Show a batch of images

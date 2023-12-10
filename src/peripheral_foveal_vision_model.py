@@ -252,7 +252,8 @@ class CombinerModelTimeSeriesTransformer(nn.Module):
 
 
 class PeripheralFovealVisionModel(nn.Module):
-    def __init__(self):
+    def __init__(self, use_foveation_module=True):
+        self.use_foveation_module = use_foveation_module
         super().__init__()
         self.peripheral_resolution = RESNET_DEFAULT_INPUT_SIZE
         self.downsampler = Resize(
@@ -353,9 +354,10 @@ class PeripheralFovealVisionModel(nn.Module):
         logging.debug(f"Peripheral feature shape: {peripheral_feature.shape}")
 
         # Extract features from the foveal patch
-        # TOOD(rgg): remove this, just for testing without foveation
-        foveal_patch = self.foveation_module(self.current_fixation, current_image)
-        # foveal_patch = current_image
+        if self.use_foveation_module:
+            foveal_patch = self.foveation_module(self.current_fixation, current_image)
+        else:
+            foveal_patch = current_image
         logging.debug(f"Foveal patch shape: {foveal_patch.shape}")
         foveal_feature = self.foveal_model(foveal_patch)
         logging.debug(f"Foveal feature shape: {foveal_feature.shape}")
