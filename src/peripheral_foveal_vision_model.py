@@ -105,9 +105,6 @@ class LinearCombiner(nn.Module):
         self,
         buffer_size=3,
         n_inputs: int = 4098,
-        n_encoder_layers: int = 2,
-        dropout: float = 0.0,
-        fixation_length=2,
         n_object_to_track=2048+4,
     ):
         """
