@@ -153,8 +153,10 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     # setup tracker
     # model_filepath = r'/home/alovekin/foveated_vision/models/20231206_185942_model_epoch_2_step_3760.pth'
-    model_filepath_base = r'./models/'
-    model_filepath = model_filepath_base + r'20231206_185942_model_epoch_2_step_3760.pth'
+    # model_filepath_base = r'./models/'
+    # model_filepath = model_filepath_base + r'20231206_185942_model_epoch_2_step_3760.pth'
+    model_filepath_base = r"/scratch/eecs542s001f23_class_root/eecs542s001f23_class/shared_data/group_raz/models"
+    model_filepath = model_filepath_base + r'20231209_070233_model_epoch_2_step_4640_0.042888__batch7_sleng1e3_lr5e6_iou5e2.pth'
     tracker = FoveatedVisionTracker(model_filepath, targ_size=(224,224))
 
     # # run experiments on VOT
@@ -173,7 +175,7 @@ if __name__ == '__main__':
         subset='val', #note that 'test' ground-truth is withheld
         result_dir='results',
         report_dir='reports')
-    # experiment.run(tracker, visualize=False)
+    experiment.run(tracker, visualize=False)
 
     # report performance
     experiment.report([tracker.name])
