@@ -197,21 +197,20 @@ class CombinerModel(nn.Module):
         self.intermediate_dim = 512  # TODO: Make this a parameter
         self.bbox_head = nn.Sequential(
             nn.Linear(self.sequence_dim, self.intermediate_dim),
-            nn.Sigmoid(),
+            nn.ReLU(),
             nn.Linear(self.intermediate_dim, self.intermediate_dim//4),
-            nn.Sigmoid(),
+            nn.ReLU(),
             nn.Linear(self.intermediate_dim//4, 4),
-            nn.Sigmoid(),  # make outputs 0-1
+            nn.Sigmoid(),
         )
         self.pos_head = nn.Sequential(
             nn.Linear(self.sequence_dim, self.intermediate_dim),
-            nn.Sigmoid(),
+            nn.ReLU(),
             nn.Linear(self.intermediate_dim, self.intermediate_dim//4),
-            nn.Sigmoid(),
+            nn.ReLU(),
             nn.Linear(self.intermediate_dim//4, 2),
-            nn.Sigmoid(),  # make outputs 0-1
+            nn.Sigmoid(),
         )
-        self.min_bbox_width = 0.01
 
     def forward(self, all_features_buffer, object_to_track_z):
         # Transformer expects input of shape (batch, seq_len, feature_len)

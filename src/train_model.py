@@ -30,9 +30,9 @@ logging.basicConfig(
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 num_epochs = 3
-batch_size_train = 8
+batch_size_train = 7
 learning_rate = 1e-05
-clip_length_s_train = 0.3
+clip_length_s_train = 0.25
 save_model = True
 model_dir = "models"
 if not os.path.exists(model_dir):
@@ -60,11 +60,12 @@ writer = SummaryWriter(flush_secs=2)
 seed = int(time.time()*1000)
 # Save seed to tensorboard
 writer.add_scalar("Dataloader/seed", seed, 0)
-train_loader, test_loader = get_train_test_dataloaders(batch_size=batch_size_train,targ_size=(512, 512),clip_length_s=clip_length_s_train, seed=seed)
+target_size = (320, 320)
+train_loader, test_loader = get_train_test_dataloaders(batch_size=batch_size_train,targ_size=target_size,clip_length_s=clip_length_s_train, seed=seed)
 
 # Load the model
 model = PeripheralFovealVisionModel(
-    use_foveation_module=True
+    use_foveation_module=True,
 )
 
 default_fovea_shape = model.get_default_fovea_size()
