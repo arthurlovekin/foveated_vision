@@ -88,7 +88,7 @@ class IntersectionOverUnionLoss:
 
 class PeripheralFovealVisionModelLoss:
     def __init__(self, default_fovea_shape=(0.25, 0.25)):
-        self.mse_loss = nn.MSELoss()
+        self.mse_loss = nn.MSELoss(reduction="sum")
         self.iou_loss = IntersectionOverUnionLoss(
             mode="complete"
         )  # WARNING: broken because it doesn't handle inverted bounding box corners
