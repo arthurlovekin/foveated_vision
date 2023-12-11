@@ -31,9 +31,9 @@ def visualize_video(model, video_frames,gt_bounding_box,normby=None, out_dir=Non
             bboxes = model(prev_image, prev_bbox, curr_image)
             # Update the previous image and bounding box
             prev_image = curr_image
-            # prev_bbox = bboxes  # "Correct" way to do it
+            prev_bbox = bboxes  # "Correct" way to do it
             # Get the next bounding box from ground truth
-            prev_bbox = gt_bounding_box[i, :].unsqueeze(0)
+            # prev_bbox = gt_bounding_box[i, :].unsqueeze(0)
             # Recover sequence dim 
             # logging.info(f"bboxes.shape: {bboxes.shape}")
             all_bboxes = torch.cat([all_bboxes,bboxes],axis=0)
@@ -66,7 +66,7 @@ def visualize_video(model, video_frames,gt_bounding_box,normby=None, out_dir=Non
 def main(model_path,choose_vid=32, out_dir=None): 
     model = SingleFrameTrackingModel(input_size=(512,512))
     model.load_state_dict(torch.load(model_path))
-    ds = VotDataset()
+    ds = NonNullVotDataset()
     # print(ds[choose_vid][1])
     logging.info(f"Video {choose_vid} has {len(ds[choose_vid][0])} frames")
     visualize_video(model,ds[choose_vid][0], ds[choose_vid][1],normby = ['xyxy','xyxy'], out_dir=out_dir)
