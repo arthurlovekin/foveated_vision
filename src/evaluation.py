@@ -62,10 +62,11 @@ class FoveatedVisionTracker(Tracker):
 
     def init(self, image, box):
         # TODO: should our model take in the starting bounding box as well?
-        self.model.reset()
         with torch.no_grad():
+            self.model.reset()
             image_tensor = self.transform_PIL_image(image)
             self.image_shape = image_tensor.shape
+            self.model.initialize(image_tensor, box)
             self.model(image_tensor)
     
     def update(self, image):
@@ -161,7 +162,8 @@ if __name__ == '__main__':
     # model_filepath = model_filepath_base + r'20231206_185942_model_epoch_2_step_3760.pth'
     
     model_filepath_base = r"/scratch/eecs542s001f23_class_root/eecs542s001f23_class/shared_data/group_raz/models/"
-    model_filepath = model_filepath_base + r'20231209_070233_model_epoch_2_step_4640_0.042888__batch7_sleng1e3_lr5e6_iou5e2.pth'
+    # model_filepath = model_filepath_base + r'20231209_070233_model_epoch_2_step_4640_0.042888__batch7_sleng1e3_lr5e6_iou5e2.pth'
+    model_filepath = model_filepath_base + r'20231207_060336_model_epoch_2_step_5120_0.006963.pth'
     tracker = FoveatedVisionTracker(model_filepath, targ_size=(224,224), normalize_float=255.0)
 
     # # run experiments on VOT
