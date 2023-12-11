@@ -77,9 +77,10 @@ class FoveatedVisionTracker(Tracker):
     
     def update(self, image):
         with torch.no_grad():
+            img_tensor_unresized = self.transform(image)
             image_tensor = self.transform_PIL_image(image)
             bbox, next_fixation = self.model(image_tensor)
-            bbox_GOT10k = self.transform_bboxes(bbox, image_tensor)
+            bbox_GOT10k = self.transform_bboxes(bbox, img_tensor_unresized)
             return bbox_GOT10k
 
     def transform_bboxes(self, bbox, image):
@@ -87,8 +88,8 @@ class FoveatedVisionTracker(Tracker):
         into GOT10k standard [xmin, ymin, width, height] (in pixels), 
         detached and on CPU
         """
-        img_coords = bbox_to_img_coords(bbox, image)
-        bbox_corners_width = corners_to_corners_width(img_coords)
+        bbox_img_coords_corners = bbox_to_img_coords(bbox, image)
+        bbox_corners_width = corners_to_corners_width(bbox_img_coords_corners)
         return bbox_corners_width.detach().cpu()
 
 class CustomExperimentGOT10k(ExperimentGOT10k):
@@ -176,7 +177,6 @@ if __name__ == '__main__':
     # logging.info('Running experiments on VOT')
     # experiment = ExperimentVOT(
     #     root_dir=r'/scratch/eecs542s001f23_class_root/eecs542s001f23_class/shared_data/group_raz/data/vot/longterm/sequences',
-    #     subset='val', #note that 'test' ground-truth is withheld
     #     result_dir='results',
     #     report_dir='reports')
     # experiment.run(tracker, visualize=False)
@@ -188,7 +188,7 @@ if __name__ == '__main__':
         subset='val', #note that 'test' ground-truth is withheld
         result_dir='results',
         report_dir='reports')
-    experiment.run(tracker, visualize=False)
+    experiment.run(tracker, visualize=True)
 
     # report performance
     experiment.report([tracker.name])
