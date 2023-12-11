@@ -132,7 +132,8 @@ def draw_bboxes(images,bboxes:list[torch.tensor],names:list=None,norm_by:list[st
         out_imgs.append(torchvision.utils.draw_bounding_boxes(
                 images[imagenum,...], 
                 boxes=torch.stack([b[imagenum,...] for b in bboxes]), 
-                labels = names 
+                labels = names,
+                width=3
             ))
     return torch.stack(out_imgs)    
     

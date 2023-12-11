@@ -62,7 +62,7 @@ def main(model_path,choose_vid=32, out_dir=None):
     ds = VotDataset()
     # print(ds[choose_vid][1])
     logging.info(f"Video {choose_vid} has {len(ds[choose_vid][0])} frames")
-    visualize_video(model,ds[choose_vid][0], ds[choose_vid][1],normby = ['default','default','xyxy'], out_dir=out_dir)
+    visualize_video(model,ds[choose_vid][0], ds[choose_vid][1],normby = ['xyxy','xyxy','xyxy'], out_dir=out_dir)
 
 if __name__ == "__main__":
     # Get the model path from the command line
