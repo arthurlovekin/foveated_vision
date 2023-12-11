@@ -3,3 +3,4 @@ protobuf==3.20.* # Needed for tensorboard
 torchinfo==1.8.0
 tqdm==4.66.1
 got10k==0.1.3
+PyQt5==5.15.10 # for GOT10k visualization
