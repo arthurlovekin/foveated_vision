@@ -36,7 +36,7 @@ class IdentityTracker(Tracker):
 
 # https://github.com/got-10k/siamfc/blob/master/siamfc.py
 class FoveatedVisionTracker(Tracker):
-    def __init__(self, model_filepath, targ_size=None):
+    def __init__(self, model_filepath, targ_size=None, normalize_float=None):
         super(FoveatedVisionTracker, self).__init__(name='FoveatedVisionTracker',
                                                     is_deterministic=True)
         self.model_filepath = model_filepath
@@ -50,10 +50,14 @@ class FoveatedVisionTracker(Tracker):
             self.resize = lambda x:x
         else: 
             self.resize = Resize(size=targ_size,antialias=True)
+        if normalize_float is None:
+            self.normalize_float = 1.0
+        else:
+            self.normalize_float = normalize_float
         self.transform = PILToTensor()
 
     def transform_PIL_image(self, PIL_image):
-        image_tensor = self.resize(self.transform(PIL_image)).float().to(self.device)
+        image_tensor = self.resize(self.transform(PIL_image)).float().to(self.device) / self.normalize_float
         return image_tensor
 
     def init(self, image, box):
@@ -153,9 +157,12 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     # setup tracker
     # model_filepath = r'/home/alovekin/foveated_vision/models/20231206_185942_model_epoch_2_step_3760.pth'
-    model_filepath_base = r'./models/'
-    model_filepath = model_filepath_base + r'20231206_185942_model_epoch_2_step_3760.pth'
-    tracker = FoveatedVisionTracker(model_filepath, targ_size=(224,224))
+    # model_filepath_base = r'./models/'
+    # model_filepath = model_filepath_base + r'20231206_185942_model_epoch_2_step_3760.pth'
+    
+    model_filepath_base = r"/scratch/eecs542s001f23_class_root/eecs542s001f23_class/shared_data/group_raz/models/"
+    model_filepath = model_filepath_base + r'20231209_070233_model_epoch_2_step_4640_0.042888__batch7_sleng1e3_lr5e6_iou5e2.pth'
+    tracker = FoveatedVisionTracker(model_filepath, targ_size=(224,224), normalize_float=255.0)
 
     # # run experiments on VOT
     # logging.info('Running experiments on VOT')
