@@ -21,7 +21,7 @@ from peripheral_foveal_vision_model import PeripheralFovealVisionModel
 from torchvision.io import read_image
 import logging
 from torchvision.transforms import PILToTensor, Resize
-from utils import bbox_to_img_coords, corners_to_corners_width
+from utils import bbox_to_img_coords, corners_to_corners_width, corner_width_to_corners
 # pip3 install got10k
 # https://github.com/got-10k/toolkit
 class IdentityTracker(Tracker):
@@ -59,14 +59,20 @@ class FoveatedVisionTracker(Tracker):
     def transform_PIL_image(self, PIL_image):
         image_tensor = self.resize(self.transform(PIL_image)).float().to(self.device) / self.normalize_float
         return image_tensor
+    
+    def transform_numpy_bbox(self, np_bbox):
+        bbox_tensor = corner_width_to_corners(torch.from_numpy(np_bbox).float().to(self.device))
+        return bbox_tensor
 
     def init(self, image, box):
-        # TODO: should our model take in the starting bounding box as well?
         with torch.no_grad():
             self.model.reset()
             image_tensor = self.transform_PIL_image(image)
+            logging.debug(f"input image_tensor.shape {image_tensor.shape}")
+            bbox_tensor = self.transform_numpy_bbox(box)
+            logging.debug(f"input bbox_tensor shape: {bbox_tensor.shape}")
             self.image_shape = image_tensor.shape
-            self.model.initialize(image_tensor, box)
+            self.model.initialize(image_tensor, bbox_tensor)
             self.model(image_tensor)
     
     def update(self, image):
@@ -182,7 +188,7 @@ if __name__ == '__main__':
         subset='val', #note that 'test' ground-truth is withheld
         result_dir='results',
         report_dir='reports')
-    # experiment.run(tracker, visualize=False)
+    experiment.run(tracker, visualize=False)
 
     # report performance
     experiment.report([tracker.name])

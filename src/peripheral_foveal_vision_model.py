@@ -138,6 +138,7 @@ class CombinerModel(nn.Module):
     def forward(self, all_features_buffer, object_to_track_z):
         # Transformer expects input of shape (batch, seq_len, feature_len)
         # Concatenate all features along the time dimension
+        # logging.info(f"all_features_buffer type: ")
         positional_features = self.positional_encoding(all_features_buffer)
         logging.debug(f"Transformer input shape: {positional_features.shape}")
         latent_seq = self.transformer_model(positional_features)
@@ -211,10 +212,17 @@ class PeripheralFovealVisionModel(nn.Module):
         # Take a high res patch centered at the bbox using the foveation module
         # Get the center of the bbox (batched) (xmin, ymin, xmax, ymax)
         # Need a tensor of shape (batch, 2) for the foveation module
+        if len(init_bbox.shape) == 1:
+            init_bbox = init_bbox.unsqueeze(0)
+        if len(current_image.shape) == 3: 
+            current_image = current_image.unsqueeze(0)
+        logging.debug(f"Unsqueezed Init bbox shape: {init_bbox.shape}")
+        logging.debug(f"Unsqueezed image shape: {current_image.shape}")
         bbox_center = torch.stack([
                 (init_bbox[:, 0] + init_bbox[:, 2]) / 2.0,
                 (init_bbox[:, 1] + init_bbox[:, 3]) / 2.0,
             ], dim=1)
+        logging.debug(f"Init bbox_center shape: {bbox_center.shape}")
         with torch.no_grad():
             patch = self.foveation_module(bbox_center, current_image)
         # Initialize the current fixation to the center of the bbox
